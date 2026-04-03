@@ -278,22 +278,25 @@ class WooCommerceClient {
           if (!brand && p.brands && p.brands.length > 0) {
             brand = p.brands.map((b) => b.name || b).join(", ");
           }
-          productMap[p.id] = { brand };
+          const image = (p.images && p.images.length > 0) ? String(p.images[0].src || "") : "";
+          productMap[p.id] = { brand, image };
         }
       } catch (e) {
         // Product fetch failed, proceed without brand info
       }
     }
 
-    return lineItems.map((li) => ({
-      name: String(li.name || ""),
-      quantity: parseInt(li.quantity) || 1,
-      price: String(li.price || li.total || "0"),
-      image: (li.image && li.image.src) ? String(li.image.src) : "",
-      brand: productMap[li.product_id]
-        ? String(productMap[li.product_id].brand)
-        : "",
-    }));
+    return lineItems.map((li) => {
+      const prod = productMap[li.product_id] || {};
+      const rawPrice = parseFloat(li.price || li.total || 0);
+      return {
+        name: String(li.name || ""),
+        quantity: parseInt(li.quantity) || 1,
+        price: rawPrice.toFixed(2),
+        image: prod.image || ((li.image && li.image.src) ? String(li.image.src) : ""),
+        brand: prod.brand ? String(prod.brand) : "",
+      };
+    });
   }
 
   /**
