@@ -287,7 +287,8 @@ class WooCommerceClient {
       }
     }
 
-    return lineItems.map((li) => {
+    // Fetch images in parallel and convert to data URLs
+    const items = lineItems.map((li) => {
       const prod = productMap[li.product_id] || {};
       const rawPrice = parseFloat(li.price || li.total || 0);
       let formattedPrice;
@@ -303,10 +304,29 @@ class WooCommerceClient {
         name: String(li.name || ""),
         quantity: parseInt(li.quantity) || 1,
         price: formattedPrice,
-        image: prod.image || ((li.image && li.image.src) ? String(li.image.src) : ""),
+        imageUrl: prod.image || ((li.image && li.image.src) ? String(li.image.src) : ""),
         brand: prod.brand ? String(prod.brand) : "",
       };
     });
+
+    // Convert image URLs to data URIs so they work in chrome context
+    await Promise.all(items.map(async (item) => {
+      if (!item.imageUrl) { item.image = ""; return; }
+      try {
+        const resp = await fetch(item.imageUrl);
+        const blob = await resp.blob();
+        const reader = new FileReader();
+        item.image = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result || "");
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        item.image = "";
+      }
+      delete item.imageUrl;
+    }));
+
+    return items;
   }
 
   /**
