@@ -1,0 +1,102 @@
+{
+  "extensionName": {
+    "message": "WooCommerce Customer Lookup"
+  },
+  "extensionDescription": {
+    "message": "Look up WooCommerce customers and orders from email"
+  },
+  "panelTitle": {
+    "message": "WooCommerce Orders"
+  },
+  "loading": {
+    "message": "Loading..."
+  },
+  "customerNotFound": {
+    "message": "Not a WooCommerce customer"
+  },
+  "noOrders": {
+    "message": "Customer has no orders yet"
+  },
+  "totalOrderValue": {
+    "message": "Total order value"
+  },
+  "mixedCurrencies": {
+    "message": "(mixed currencies)"
+  },
+  "orderNumber": {
+    "message": "Order #$ORDER_ID$",
+    "placeholders": {
+      "ORDER_ID": {
+        "content": "$1"
+      }
+    }
+  },
+  "notConfigured": {
+    "message": "WooCommerce not configured. Go to Add-on Settings."
+  },
+  "errorFetching": {
+    "message": "Error fetching WooCommerce data"
+  },
+  "authError": {
+    "message": "Authentication failed — check your API credentials"
+  },
+  "settingsTitle": {
+    "message": "WooCommerce Settings"
+  },
+  "shopUrl": {
+    "message": "Shop URL"
+  },
+  "shopUrlPlaceholder": {
+    "message": "https://myshop.example.com"
+  },
+  "consumerKey": {
+    "message": "Consumer Key"
+  },
+  "consumerSecret": {
+    "message": "Consumer Secret"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "saved": {
+    "message": "Settings saved"
+  },
+  "testConnection": {
+    "message": "Test Connection"
+  },
+  "connectionSuccess": {
+    "message": "Connection successful!"
+  },
+  "connectionFailed": {
+    "message": "Connection failed: $ERROR$",
+    "placeholders": {
+      "ERROR": {
+        "content": "$1"
+      }
+    }
+  },
+  "httpsWarning": {
+    "message": "Warning: Shop URL does not use HTTPS. Credentials will be sent insecurely."
+  },
+  "statusCompleted": {
+    "message": "Completed"
+  },
+  "statusProcessing": {
+    "message": "Processing"
+  },
+  "statusOnHold": {
+    "message": "On hold"
+  },
+  "statusPending": {
+    "message": "Pending"
+  },
+  "statusRefunded": {
+    "message": "Refunded"
+  },
+  "statusCancelled": {
+    "message": "Cancelled"
+  },
+  "statusFailed": {
+    "message": "Failed"
+  }
+}

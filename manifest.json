@@ -1,0 +1,36 @@
+{
+  "manifest_version": 2,
+  "name": "__MSG_extensionName__",
+  "version": "1.0.0",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "en",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "woocommerce-customer-lookup@thunderbird-extension",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "messagesRead"
+  ],
+  "background": {
+    "scripts": [
+      "woocommerce-api.js",
+      "background.js"
+    ]
+  },
+  "options_ui": {
+    "page": "options/options.html"
+  },
+  "experiment_apis": {
+    "WooCommercePanel": {
+      "schema": "api/WooCommercePanel/schema.json",
+      "child": {
+        "scopes": ["addon_child"],
+        "script": "api/WooCommercePanel/implementation.js",
+        "paths": [["WooCommercePanel"]]
+      }
+    }
+  }
+}

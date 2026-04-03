@@ -1,0 +1,102 @@
+{
+  "extensionName": {
+    "message": "WooCommerce Klanten Opzoeken"
+  },
+  "extensionDescription": {
+    "message": "Zoek WooCommerce klanten en bestellingen op via e-mail"
+  },
+  "panelTitle": {
+    "message": "WooCommerce Bestellingen"
+  },
+  "loading": {
+    "message": "Laden..."
+  },
+  "customerNotFound": {
+    "message": "Geen WooCommerce klant"
+  },
+  "noOrders": {
+    "message": "Klant heeft nog geen bestellingen"
+  },
+  "totalOrderValue": {
+    "message": "Totale bestelwaarde"
+  },
+  "mixedCurrencies": {
+    "message": "(gemengde valuta)"
+  },
+  "orderNumber": {
+    "message": "Bestelling #$ORDER_ID$",
+    "placeholders": {
+      "ORDER_ID": {
+        "content": "$1"
+      }
+    }
+  },
+  "notConfigured": {
+    "message": "WooCommerce niet geconfigureerd. Ga naar Add-on Instellingen."
+  },
+  "errorFetching": {
+    "message": "Fout bij ophalen WooCommerce gegevens"
+  },
+  "authError": {
+    "message": "Authenticatie mislukt — controleer uw API-inloggegevens"
+  },
+  "settingsTitle": {
+    "message": "WooCommerce Instellingen"
+  },
+  "shopUrl": {
+    "message": "Winkel URL"
+  },
+  "shopUrlPlaceholder": {
+    "message": "https://mijnwinkel.voorbeeld.nl"
+  },
+  "consumerKey": {
+    "message": "Consumer Key"
+  },
+  "consumerSecret": {
+    "message": "Consumer Secret"
+  },
+  "save": {
+    "message": "Opslaan"
+  },
+  "saved": {
+    "message": "Instellingen opgeslagen"
+  },
+  "testConnection": {
+    "message": "Verbinding Testen"
+  },
+  "connectionSuccess": {
+    "message": "Verbinding geslaagd!"
+  },
+  "connectionFailed": {
+    "message": "Verbinding mislukt: $ERROR$",
+    "placeholders": {
+      "ERROR": {
+        "content": "$1"
+      }
+    }
+  },
+  "httpsWarning": {
+    "message": "Waarschuwing: Winkel URL gebruikt geen HTTPS. Inloggegevens worden onveilig verzonden."
+  },
+  "statusCompleted": {
+    "message": "Voltooid"
+  },
+  "statusProcessing": {
+    "message": "In behandeling"
+  },
+  "statusOnHold": {
+    "message": "In de wacht"
+  },
+  "statusPending": {
+    "message": "In afwachting"
+  },
+  "statusRefunded": {
+    "message": "Terugbetaald"
+  },
+  "statusCancelled": {
+    "message": "Geannuleerd"
+  },
+  "statusFailed": {
+    "message": "Mislukt"
+  }
+}
