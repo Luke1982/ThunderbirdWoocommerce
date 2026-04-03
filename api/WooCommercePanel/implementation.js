@@ -138,44 +138,91 @@ var WooCommercePanel = class extends ExtensionAPI {
 
     // --- Message Pane mode: inject below message headers ---
     function _createMessagePanePanel(win, doc) {
-      if (doc.getElementById("woocommerce-box")) {
-        const content = doc.getElementById("woocommerce-box-content");
-        return { container: doc.getElementById("woocommerce-box"), content, doc };
-      }
-
-      // In TB 128+/140+, the message pane is inside about:message
-      // which is inside the 3pane browser. Try to find it.
+      // Each time we're called, we need to find the CURRENT message doc
+      // because it changes with each message. So don't cache by woocommerce-box.
       let messageDoc = null;
 
-      // Try via currentAbout3Pane -> messageBrowser
-      const about3Pane = doc.getElementById("tabmail")?.currentAbout3Pane;
+      // Strategy 1: currentAbout3Pane -> messageBrowser
+      const tabmail = doc.getElementById("tabmail");
+      const about3Pane = tabmail?.currentAbout3Pane;
+      console.log("WooCommercePanel: about3Pane:", !!about3Pane);
+
       if (about3Pane) {
-        const messageBrowser = about3Pane.messageBrowser;
-        if (messageBrowser) {
-          const aboutMessage = messageBrowser.contentWindow;
-          if (aboutMessage) {
-            messageDoc = aboutMessage.document;
+        // Try .messageBrowser property
+        let mb = about3Pane.messageBrowser;
+        console.log("WooCommercePanel: messageBrowser prop:", !!mb);
+
+        // Try getElementById in about:3pane document
+        if (!mb && about3Pane.document) {
+          mb = about3Pane.document.getElementById("messageBrowser");
+          console.log("WooCommercePanel: messageBrowser by id:", !!mb);
+        }
+        // Also try messagepane
+        if (!mb && about3Pane.document) {
+          mb = about3Pane.document.getElementById("messagepane");
+          console.log("WooCommercePanel: messagepane by id:", !!mb);
+        }
+
+        if (mb) {
+          // mb could be a browser element or an iframe
+          const cw = mb.contentWindow;
+          console.log("WooCommercePanel: contentWindow:", !!cw);
+          if (cw) {
+            messageDoc = cw.document;
+          }
+        }
+
+        // Strategy 2: look for about:message in about3Pane's frames
+        if (!messageDoc && about3Pane.frames) {
+          for (let i = 0; i < about3Pane.frames.length; i++) {
+            try {
+              const href = about3Pane.frames[i].location?.href || "";
+              if (href.includes("message")) {
+                console.log("WooCommercePanel: found message frame:", href);
+                messageDoc = about3Pane.frames[i].document;
+                break;
+              }
+            } catch (e) { /* skip */ }
+          }
+        }
+
+        // Strategy 3: query all browsers in about:3pane
+        if (!messageDoc && about3Pane.document) {
+          const browsers = about3Pane.document.querySelectorAll("browser, iframe");
+          console.log("WooCommercePanel: browsers in 3pane:", browsers.length);
+          for (const b of browsers) {
+            try {
+              const href = b.contentWindow?.location?.href || "";
+              console.log("WooCommercePanel: browser href:", href, "id:", b.id);
+              if (href.includes("message")) {
+                messageDoc = b.contentWindow.document;
+                break;
+              }
+            } catch (e) { /* skip */ }
           }
         }
       }
 
+      // Strategy 4: top-level window frames
       if (!messageDoc) {
-        // Fallback: try direct about:message frame
-        const frames = win.frames;
-        for (let i = 0; i < frames.length; i++) {
+        for (let i = 0; i < win.frames.length; i++) {
           try {
-            if (frames[i].location.href.includes("about:message")) {
-              messageDoc = frames[i].document;
+            const href = win.frames[i].location?.href || "";
+            if (href.includes("message")) {
+              console.log("WooCommercePanel: found in top frames:", href);
+              messageDoc = win.frames[i].document;
               break;
             }
-          } catch (e) { /* cross-origin, skip */ }
+          } catch (e) { /* skip */ }
         }
       }
 
       if (!messageDoc) {
-        // Can't find message pane, fall back to today pane
+        console.warn("WooCommercePanel: could not find message pane document, falling back to today pane");
         return _createTodayPanePanel(win, doc);
       }
+
+      console.log("WooCommercePanel: got messageDoc, looking for headers");
 
       const headerBox =
         messageDoc.getElementById("expandedHeadersTopBox") ||
