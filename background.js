@@ -53,6 +53,34 @@ async function handleMessage(message) {
   }
 }
 
+// Handle order status change requests from the panel
+browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId, newStatus) => {
+  const displayMode = await getDisplayMode();
+  try {
+    await browser.WooCommercePanel.updatePanel({ type: "loading" }, displayMode);
+    await wooCommerce.updateOrderStatus(orderId, newStatus);
+    // Clear cache so we get fresh data
+    if (lastEmail) {
+      wooCommerce.clearCache(lastEmail);
+    }
+    // Re-fetch and display updated orders
+    const result = await wooCommerce.lookupByEmail(lastEmail);
+    if (result.type === "orders") {
+      const config = await wooCommerce.getConfig();
+      result.shopUrl = config ? config.shopUrl : "";
+    }
+    await browser.WooCommercePanel.updatePanel(result, displayMode);
+  } catch (err) {
+    let msg;
+    if (err.message === "auth_error") {
+      msg = browser.i18n.getMessage("authError");
+    } else {
+      msg = browser.i18n.getMessage("statusUpdateFailed") + ": " + err.message;
+    }
+    await browser.WooCommercePanel.updatePanel({ type: "error", message: msg }, displayMode);
+  }
+});
+
 // Works with Conversations plugin
 browser.mailTabs.onSelectedMessagesChanged.addListener(async (tab, messageList) => {
   if (messageList.messages.length === 1) {

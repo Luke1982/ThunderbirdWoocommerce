@@ -110,5 +110,11 @@
   },
   "restartNote": {
     "message": "Restart Thunderbird after changing the display location."
+  },
+  "changeStatus": {
+    "message": "Change status"
+  },
+  "statusUpdateFailed": {
+    "message": "Failed to update order status"
   }
 }

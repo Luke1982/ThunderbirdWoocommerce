@@ -71,6 +71,22 @@
           }
         ]
       }
+    ],
+    "events": [
+      {
+        "name": "onOrderStatusChangeRequested",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "orderId",
+            "type": "integer"
+          },
+          {
+            "name": "newStatus",
+            "type": "string"
+          }
+        ]
+      }
     ]
   }
 ]

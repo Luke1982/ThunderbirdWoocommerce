@@ -230,6 +230,58 @@ class WooCommerceClient {
   }
 
   /**
+   * Make an authenticated PUT request to the WooCommerce REST API.
+   */
+  async apiPut(config, endpoint, body) {
+    const url = new URL(`${config.shopUrl}/wp-json${endpoint}`);
+    const credentials = btoa(
+      `${config.consumerKey}:${config.consumerSecret}`
+    );
+
+    const response = await fetch(url.toString(), {
+      method: "PUT",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("auth_error");
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Update order status.
+   */
+  async updateOrderStatus(orderId, newStatus) {
+    const config = await this.getConfig();
+    if (!config) throw new Error("Not configured");
+    return this.apiPut(config, `/wc/v3/orders/${orderId}`, {
+      status: newStatus,
+    });
+  }
+
+  /**
+   * Clear cache for a given email.
+   */
+  clearCache(email) {
+    if (email) {
+      this._cache.delete(email.toLowerCase().trim());
+    } else {
+      this._cache.clear();
+    }
+  }
+
+  /**
    * Test connection to WooCommerce.
    * @returns {true} on success, throws on failure.
    */

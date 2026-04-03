@@ -7,6 +7,7 @@ var WooCommercePanel = class extends ExtensionAPI {
     const { extension } = context;
     let currentPanel = null;
     let currentMode = null;
+    let statusChangeFire = null;
 
     return {
       WooCommercePanel: {
@@ -24,6 +25,14 @@ var WooCommercePanel = class extends ExtensionAPI {
             _updatePanelContent(currentPanel, state);
           }
         },
+        onOrderStatusChangeRequested: new ExtensionCommon.EventManager({
+          context,
+          name: "WooCommercePanel.onOrderStatusChangeRequested",
+          register(fire) {
+            statusChangeFire = fire;
+            return () => { statusChangeFire = null; };
+          },
+        }).api(),
       },
     };
 
@@ -274,6 +283,10 @@ var WooCommercePanel = class extends ExtensionAPI {
     function _renderOrders(panel, state) {
       const { content, doc } = panel;
 
+      // Remove any leftover context menu
+      const oldMenu = doc.getElementById("woocommerce-ctx-menu");
+      if (oldMenu) oldMenu.remove();
+
       const totalDiv = doc.createElement("div");
       totalDiv.style.cssText =
         "font-weight: bold; margin-bottom: 6px; font-size: 12px;";
@@ -343,8 +356,121 @@ var WooCommercePanel = class extends ExtensionAPI {
         bottomRow.appendChild(badge);
 
         card.appendChild(bottomRow);
+
+        // Right-click context menu for status change
+        card.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          _showStatusMenu(doc, e, order);
+        });
+
         content.appendChild(card);
       }
+    }
+
+    function _showStatusMenu(doc, event, order) {
+      // Remove any existing menu
+      const old = doc.getElementById("woocommerce-ctx-menu");
+      if (old) old.remove();
+
+      const statuses = [
+        "pending", "processing", "on-hold", "completed",
+        "cancelled", "refunded", "failed",
+      ];
+
+      const menu = doc.createElement("div");
+      menu.id = "woocommerce-ctx-menu";
+      menu.style.cssText = `
+        position: fixed;
+        z-index: 99999;
+        background: var(--layout-background-0, -moz-Dialog);
+        border: 1px solid var(--splitter-color, ThreeDShadow);
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        padding: 4px 0;
+        font-size: 11px;
+        font-family: -moz-default;
+        min-width: 140px;
+      `;
+
+      const header = doc.createElement("div");
+      header.style.cssText = `
+        padding: 4px 10px;
+        font-weight: bold;
+        font-size: 10px;
+        color: #666;
+        border-bottom: 1px solid var(--splitter-color, #ddd);
+        margin-bottom: 2px;
+      `;
+      header.textContent = _msg("changeStatus");
+      menu.appendChild(header);
+
+      for (const status of statuses) {
+        const item = doc.createElement("div");
+        item.style.cssText = `
+          padding: 4px 10px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        `;
+
+        const dot = doc.createElement("span");
+        dot.style.cssText = `
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: ${_statusColor(status)};
+        `;
+        item.appendChild(dot);
+
+        const label = doc.createElement("span");
+        label.textContent = _statusLabel(status);
+        item.appendChild(label);
+
+        if (status === order.status) {
+          item.style.fontWeight = "bold";
+          item.style.opacity = "0.5";
+          item.style.cursor = "default";
+        } else {
+          item.addEventListener("mouseenter", () => {
+            item.style.background = "var(--layout-background-2, Highlight)";
+          });
+          item.addEventListener("mouseleave", () => {
+            item.style.background = "none";
+          });
+          item.addEventListener("click", () => {
+            menu.remove();
+            if (statusChangeFire) {
+              statusChangeFire.async(order.id, status);
+            }
+          });
+        }
+
+        menu.appendChild(item);
+      }
+
+      doc.body.appendChild(menu);
+
+      // Position: ensure it stays within viewport
+      const rect = menu.getBoundingClientRect();
+      let x = event.clientX;
+      let y = event.clientY;
+      const vw = doc.documentElement.clientWidth;
+      const vh = doc.documentElement.clientHeight;
+      if (x + rect.width > vw) x = vw - rect.width - 4;
+      if (y + rect.height > vh) y = vh - rect.height - 4;
+      menu.style.left = x + "px";
+      menu.style.top = y + "px";
+
+      // Close on click outside
+      const closeHandler = (e) => {
+        if (!menu.contains(e.target)) {
+          menu.remove();
+          doc.removeEventListener("click", closeHandler, true);
+        }
+      };
+      setTimeout(() => doc.addEventListener("click", closeHandler, true), 0);
     }
 
     // --- Helpers ---

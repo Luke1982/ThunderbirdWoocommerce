@@ -110,5 +110,11 @@
   },
   "restartNote": {
     "message": "Herstart Thunderbird na het wijzigen van de weergavelocatie."
+  },
+  "changeStatus": {
+    "message": "Status wijzigen"
+  },
+  "statusUpdateFailed": {
+    "message": "Kon orderstatus niet bijwerken"
   }
 }
