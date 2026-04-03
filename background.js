@@ -89,10 +89,18 @@ browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId
   }
 });
 
+async function resetPanel() {
+  lastEmail = null;
+  const displayMode = await getDisplayMode();
+  await browser.WooCommercePanel.updatePanel({ type: "idle" }, displayMode);
+}
+
 // Works with Conversations plugin
 browser.mailTabs.onSelectedMessagesChanged.addListener(async (tab, messageList) => {
   if (messageList.messages.length === 1) {
     await handleMessage(messageList.messages[0]);
+  } else {
+    await resetPanel();
   }
 });
 

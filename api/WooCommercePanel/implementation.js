@@ -250,6 +250,10 @@ var WooCommercePanel = class extends ExtensionAPI {
       }
 
       switch (state.type) {
+        case "idle":
+          // Empty panel, no message selected — content already cleared
+          break;
+
         case "loading": {
           const p = doc.createElement("div");
           p.style.cssText = "padding: 8px 0; font-style: italic; color: #666;";
