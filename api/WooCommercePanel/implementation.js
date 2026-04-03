@@ -1,232 +1,139 @@
 "use strict";
 
-/* global ChromeUtils, ExtensionCommon, ExtensionAPI, Services */
-
-var { ExtensionSupport } = ChromeUtils.importESModule(
-  "resource:///modules/ExtensionSupport.sys.mjs"
-);
+/* global ExtensionCommon, ExtensionAPI, Services, Cc, Ci */
 
 var WooCommercePanel = class extends ExtensionAPI {
-  onStartup() {
-    console.log("WooCommercePanel: onStartup called");
-    this._panels = new Map();
-
-    const self = this;
-    const extensionId = "woocommerce-customer-lookup@thunderbird-extension";
-
-    ExtensionSupport.registerWindowListener(extensionId, {
-      chromeURLs: ["chrome://messenger/content/messenger.xhtml"],
-
-      onLoadWindow(win) {
-        console.log("WooCommercePanel: onLoadWindow fired");
-        // Delay injection to ensure the window is fully initialized
-        win.setTimeout(() => {
-          self._injectSidebar(win);
-        }, 500);
-      },
-
-      onUnloadWindow(win) {
-        self._removeSidebar(win);
-      },
-    });
-
-    // Inject into already-open windows
-    for (const win of Services.wm.getEnumerator("mail:3pane")) {
-      console.log("WooCommercePanel: found existing 3pane window, readyState:", win.document.readyState);
-      if (win.document.readyState === "complete") {
-        this._injectSidebar(win);
-      }
-    }
-  }
-
-  onShutdown(isAppShutdown) {
-    if (isAppShutdown) return;
-    console.log("WooCommercePanel: onShutdown called");
-
-    const extensionId = "woocommerce-customer-lookup@thunderbird-extension";
-    ExtensionSupport.unregisterWindowListener(extensionId);
-
-    for (const win of Services.wm.getEnumerator("mail:3pane")) {
-      this._removeSidebar(win);
-    }
-  }
-
-  _injectSidebar(win) {
-    const doc = win.document;
-    console.log("WooCommercePanel: _injectSidebar called");
-
-    // Already injected?
-    if (doc.getElementById("woocommerce-sidebar")) {
-      console.log("WooCommercePanel: sidebar already exists");
-      return;
-    }
-
-    // In TB 128+/140+, the main content area in messenger.xhtml has this structure:
-    // The today-pane-panel is the right sidebar for calendar/tasks.
-    // We want to add our panel next to it or find the main content area.
-
-    // Try multiple injection strategies
-    let injectionPoint = null;
-    let insertMethod = "after"; // "after", "before", "append"
-
-    // Strategy 1: Find today-pane-panel and insert before it
-    const todayPane = doc.getElementById("today-pane-panel");
-    if (todayPane) {
-      console.log("WooCommercePanel: found today-pane-panel");
-      injectionPoint = todayPane;
-      insertMethod = "before";
-    }
-
-    // Strategy 2: Find tabmail-container
-    if (!injectionPoint) {
-      const tabmailContainer = doc.getElementById("tabmail-container");
-      if (tabmailContainer) {
-        console.log("WooCommercePanel: found tabmail-container");
-        injectionPoint = tabmailContainer;
-        insertMethod = "after";
-      }
-    }
-
-    // Strategy 3: Find any main layout container
-    if (!injectionPoint) {
-      const tabmail = doc.getElementById("tabmail");
-      if (tabmail) {
-        console.log("WooCommercePanel: found tabmail");
-        injectionPoint = tabmail;
-        insertMethod = "after";
-      }
-    }
-
-    if (!injectionPoint) {
-      // Log what we CAN find to help debug
-      const allIds = [];
-      const allElements = doc.querySelectorAll("[id]");
-      allElements.forEach((el) => allIds.push(el.id));
-      console.error(
-        "WooCommercePanel: Could not find injection point. Available IDs:",
-        allIds.slice(0, 50).join(", ")
-      );
-      return;
-    }
-
-    console.log("WooCommercePanel: injecting sidebar using strategy:", insertMethod, "relative to:", injectionPoint.id);
-
-    // Create splitter
-    const splitter = doc.createElement("div");
-    splitter.id = "woocommerce-splitter";
-    splitter.style.cssText = `
-      width: 5px;
-      cursor: ew-resize;
-      background: var(--splitter-color, ThreeDShadow);
-      flex-shrink: 0;
-    `;
-
-    // Create sidebar
-    const sidebar = doc.createElement("div");
-    sidebar.id = "woocommerce-sidebar";
-    sidebar.style.cssText = `
-      width: 300px;
-      min-width: 200px;
-      max-width: 500px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--layout-background-0, -moz-Dialog);
-      color: var(--layout-color-0, -moz-DialogText);
-      font-family: -moz-default;
-      font-size: 12px;
-      flex-shrink: 0;
-      border-left: 1px solid var(--splitter-color, ThreeDShadow);
-    `;
-
-    // Header
-    const header = doc.createElement("div");
-    header.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 10px;
-      font-weight: bold;
-      font-size: 13px;
-      border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
-      background: var(--layout-background-1, -moz-Dialog);
-      flex-shrink: 0;
-    `;
-    header.textContent = "WooCommerce";
-
-    // Content area
-    const content = doc.createElement("div");
-    content.id = "woocommerce-sidebar-content";
-    content.style.cssText = `
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px;
-    `;
-
-    sidebar.appendChild(header);
-    sidebar.appendChild(content);
-
-    // Splitter drag behavior
-    let isDragging = false;
-    let startX = 0;
-    let startWidth = 0;
-
-    splitter.addEventListener("mousedown", (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startWidth = sidebar.offsetWidth;
-      e.preventDefault();
-    });
-
-    doc.addEventListener("mousemove", (e) => {
-      if (!isDragging) return;
-      const diff = startX - e.clientX;
-      const newWidth = Math.min(500, Math.max(200, startWidth + diff));
-      sidebar.style.width = newWidth + "px";
-    });
-
-    doc.addEventListener("mouseup", () => {
-      isDragging = false;
-    });
-
-    // Insert into DOM
-    const parent = injectionPoint.parentNode;
-    if (insertMethod === "before") {
-      parent.insertBefore(splitter, injectionPoint);
-      parent.insertBefore(sidebar, injectionPoint);
-    } else {
-      // Insert after
-      const ref = injectionPoint.nextSibling;
-      parent.insertBefore(splitter, ref);
-      parent.insertBefore(sidebar, ref);
-    }
-
-    this._panels.set(win, { sidebar, splitter, content, doc });
-    console.log("WooCommercePanel: sidebar injected successfully");
-  }
-
-  _removeSidebar(win) {
-    const panel = this._panels.get(win);
-    if (!panel) return;
-
-    panel.sidebar.remove();
-    panel.splitter.remove();
-    this._panels.delete(win);
-    console.log("WooCommercePanel: sidebar removed");
-  }
-
   getAPI(context) {
-    const self = this;
     const { extension } = context;
+    let panel = null;
+
     console.log("WooCommercePanel: getAPI called");
+
+    function _ensureSidebar() {
+      if (panel) return panel;
+
+      console.log("WooCommercePanel: _ensureSidebar called");
+
+      const win = Services.wm.getMostRecentWindow("mail:3pane");
+      if (!win) {
+        console.error("WooCommercePanel: no mail:3pane window found");
+        return null;
+      }
+
+      const doc = win.document;
+      console.log("WooCommercePanel: got window, readyState:", doc.readyState);
+
+      // Already injected?
+      if (doc.getElementById("woocommerce-sidebar")) {
+        console.log("WooCommercePanel: sidebar already exists in DOM");
+        const content = doc.getElementById("woocommerce-sidebar-content");
+        panel = { content, doc };
+        return panel;
+      }
+
+      // Log available top-level element IDs for debugging
+      const topIds = [];
+      for (const el of doc.querySelectorAll(":scope > *, body > *, [id]")) {
+        if (el.id) topIds.push(el.id);
+      }
+      console.log("WooCommercePanel: available IDs:", topIds.join(", "));
+
+      // Find injection point - try multiple strategies
+      let injectionParent = null;
+      let insertBefore = null;
+
+      // Strategy 1: today-pane-panel (right side where calendar/tasks are)
+      const todayPane = doc.getElementById("today-pane-panel");
+      if (todayPane && todayPane.parentNode) {
+        console.log("WooCommercePanel: found today-pane-panel");
+        injectionParent = todayPane.parentNode;
+        insertBefore = todayPane;
+      }
+
+      // Strategy 2: Insert at end of tabmail's parent
+      if (!injectionParent) {
+        const tabmail = doc.getElementById("tabmail-container") || doc.getElementById("tabmail");
+        if (tabmail && tabmail.parentNode) {
+          console.log("WooCommercePanel: using tabmail parent, tabmail.id:", tabmail.id);
+          injectionParent = tabmail.parentNode;
+          insertBefore = tabmail.nextSibling;
+        }
+      }
+
+      // Strategy 3: document body
+      if (!injectionParent) {
+        injectionParent = doc.body || doc.documentElement;
+        insertBefore = null;
+        console.log("WooCommercePanel: fallback to body/documentElement");
+      }
+
+      console.log("WooCommercePanel: injectionParent tag:", injectionParent.tagName, "id:", injectionParent.id || "(none)");
+
+      // Create sidebar
+      const sidebar = doc.createElement("div");
+      sidebar.id = "woocommerce-sidebar";
+      sidebar.style.cssText = `
+        width: 300px;
+        min-width: 200px;
+        max-width: 500px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--layout-background-0, -moz-Dialog);
+        color: var(--layout-color-0, -moz-DialogText);
+        font-family: -moz-default;
+        font-size: 12px;
+        flex-shrink: 0;
+        border-left: 1px solid var(--splitter-color, ThreeDShadow);
+      `;
+
+      // Header
+      const header = doc.createElement("div");
+      header.style.cssText = `
+        display: flex;
+        align-items: center;
+        padding: 8px 10px;
+        font-weight: bold;
+        font-size: 13px;
+        border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
+        background: var(--layout-background-1, -moz-Dialog);
+        flex-shrink: 0;
+      `;
+      header.textContent = "WooCommerce";
+
+      // Content area
+      const content = doc.createElement("div");
+      content.id = "woocommerce-sidebar-content";
+      content.style.cssText = `
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+      `;
+
+      sidebar.appendChild(header);
+      sidebar.appendChild(content);
+
+      if (insertBefore) {
+        injectionParent.insertBefore(sidebar, insertBefore);
+      } else {
+        injectionParent.appendChild(sidebar);
+      }
+
+      panel = { content, doc, sidebar };
+      console.log("WooCommercePanel: sidebar injected successfully");
+      return panel;
+    }
 
     return {
       WooCommercePanel: {
         async updatePanel(state) {
-          console.log("WooCommercePanel: updatePanel called, state:", state.type);
-          for (const [win, panel] of self._panels) {
-            _updatePanelContent(panel, state);
+          console.log("WooCommercePanel: updatePanel called, type:", state.type);
+          const p = _ensureSidebar();
+          if (!p) {
+            console.error("WooCommercePanel: could not create sidebar");
+            return;
           }
+          _updatePanelContent(p, state);
         },
       },
     };
@@ -287,7 +194,6 @@ var WooCommercePanel = class extends ExtensionAPI {
     function _renderOrders(panel, state) {
       const { content, doc } = panel;
 
-      // Total value
       const totalDiv = doc.createElement("div");
       totalDiv.style.cssText =
         "font-weight: bold; margin-bottom: 8px; font-size: 13px; padding: 4px 0;";
@@ -300,7 +206,6 @@ var WooCommercePanel = class extends ExtensionAPI {
       totalDiv.textContent = totalText;
       content.appendChild(totalDiv);
 
-      // Orders list
       for (const order of state.orders) {
         const card = doc.createElement("div");
         card.style.cssText = `
@@ -308,7 +213,6 @@ var WooCommercePanel = class extends ExtensionAPI {
           border-bottom: 1px solid var(--splitter-color, #ddd);
         `;
 
-        // Top row: order number link + total
         const topRow = doc.createElement("div");
         topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;";
 
@@ -321,14 +225,9 @@ var WooCommercePanel = class extends ExtensionAPI {
         link.addEventListener("click", (e) => {
           e.preventDefault();
           try {
-            const topWin = content.ownerGlobal.top || content.ownerGlobal;
-            if (topWin.openLinkExternally) {
+            const topWin = Services.wm.getMostRecentWindow("mail:3pane");
+            if (topWin && topWin.openLinkExternally) {
               topWin.openLinkExternally(link.href);
-            } else {
-              const eps = Cc[
-                "@mozilla.org/uriloader/external-protocol-service;1"
-              ].getService(Ci.nsIExternalProtocolService);
-              eps.loadURI(Services.io.newURI(link.href));
             }
           } catch (ex) {
             console.error("WooCommercePanel: Could not open link:", ex);
@@ -343,7 +242,6 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         card.appendChild(topRow);
 
-        // Bottom row: date + status badge
         const bottomRow = doc.createElement("div");
         bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 11px;";
 
@@ -368,8 +266,6 @@ var WooCommercePanel = class extends ExtensionAPI {
         content.appendChild(card);
       }
     }
-
-    // --- Helpers ---
 
     function _msg(key, args) {
       try {
