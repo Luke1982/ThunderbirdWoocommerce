@@ -364,6 +364,7 @@ class WooCommerceClient {
   async apiGet(config, endpoint, params = {}) {
     const url = new URL(`${config.shopUrl}/wp-json${endpoint}`);
     for (const [key, value] of Object.entries(params)) {
+      if (key === "_retry") continue; // internal param, don't send to API
       url.searchParams.set(key, String(value));
     }
 
@@ -384,6 +385,9 @@ class WooCommerceClient {
     }
 
     if (response.status === 429) {
+      if (params._retry) {
+        throw new Error("Rate limited by WooCommerce API");
+      }
       // Retry once after 2 seconds
       await new Promise((resolve) => setTimeout(resolve, 2000));
       return this.apiGet(config, endpoint, { ...params, _retry: 1 });
@@ -697,6 +701,8 @@ git commit -m "feat: add Experiment API schema for WooCommercePanel"
 
 This is the most complex file. It runs in the `about:message` context, injects the panel DOM, detects message display, and handles `updatePanel` calls.
 
+> **Note:** The `gMessageListeners` API and `externalProtocolService.loadURI` signature should be verified against Thunderbird 128+ during integration testing (Task 7). These are internal Gecko/Thunderbird APIs that may have changed. If `gMessageListeners` is unavailable, alternative approaches include observing `MsgLoaded` events or using `nsIMsgDBHdr` observers.
+
 - [ ] **Step 1: Create `api/WooCommercePanel/implementation.js`**
 
 ```javascript
@@ -711,7 +717,10 @@ var WooCommercePanel = class extends ExtensionAPI {
   getAPI(context) {
     const { extension } = context;
 
-    // Track panels per tab and event listeners
+    // Track panels per window context and event listeners.
+    // Each about:message context gets its own child script instance,
+    // so we use a simple counter as panel ID within each context.
+    let panelIdCounter = 0;
     const panels = new Map();
     let fireOnMessageDisplayed = null;
 
@@ -743,10 +752,9 @@ var WooCommercePanel = class extends ExtensionAPI {
 
                   if (!email || !email.includes("@")) return;
 
-                  // Get the tab ID from the window context
-                  const tabId = context.viewType === "tab"
-                    ? context.tabId
-                    : win.browsingContext?.id || 0;
+                  // Use a stable panel ID for this context.
+                  // Each about:message window gets one panel, keyed by ID 0.
+                  const tabId = 0;
 
                   // Ensure panel exists for this context
                   if (!panels.has(tabId)) {
@@ -974,16 +982,27 @@ var WooCommercePanel = class extends ExtensionAPI {
         link.addEventListener("click", (e) => {
           e.preventDefault();
           // Open in external browser
-          const uri = Cc[
-            "@mozilla.org/network/io-service;1"
-          ]
-            .getService(Ci.nsIIOService)
-            .newURI(link.href);
-          const externalProtocolService = Cc[
-            "@mozilla.org/uriloader/external-protocol-service;1"
-          ]
-            .getService(Ci.nsIExternalProtocolService);
-          externalProtocolService.loadURI(uri);
+          // Note: loadURI signature may need a triggeringPrincipal in TB 128+.
+          // Verify during integration testing. Alternative: use openLinkExternally().
+          try {
+            const win2 = content.ownerGlobal.top;
+            if (win2.openLinkExternally) {
+              win2.openLinkExternally(link.href);
+            } else {
+              const uri = Cc[
+                "@mozilla.org/network/io-service;1"
+              ]
+                .getService(Ci.nsIIOService)
+                .newURI(link.href);
+              const eps = Cc[
+                "@mozilla.org/uriloader/external-protocol-service;1"
+              ]
+                .getService(Ci.nsIExternalProtocolService);
+              eps.loadURI(uri);
+            }
+          } catch (ex) {
+            console.error("WooCommercePanel: Could not open link:", ex);
+          }
         });
         numCell.appendChild(link);
         row.appendChild(numCell);
