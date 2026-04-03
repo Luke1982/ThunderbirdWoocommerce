@@ -5,8 +5,6 @@
 
 class WooCommerceClient {
   constructor() {
-    this._cache = new Map();
-    this._cacheTTL = 5 * 60 * 1000; // 5 minutes
   }
 
   /**
@@ -155,12 +153,6 @@ class WooCommerceClient {
   async lookupByEmail(email) {
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check cache
-    const cached = this._cache.get(normalizedEmail);
-    if (cached && Date.now() - cached.timestamp < this._cacheTTL) {
-      return cached.result;
-    }
-
     const config = await this.getConfig();
     if (!config) {
       return { type: "not_configured" };
@@ -180,15 +172,11 @@ class WooCommerceClient {
     }
 
     if (!customer && orders.length === 0) {
-      const result = { type: "customer_not_found" };
-      this._cache.set(normalizedEmail, { result, timestamp: Date.now() });
-      return result;
+      return { type: "customer_not_found" };
     }
 
     if (orders.length === 0) {
-      const result = { type: "no_orders" };
-      this._cache.set(normalizedEmail, { result, timestamp: Date.now() });
-      return result;
+      return { type: "no_orders" };
     }
 
     // Calculate total order value (exclude cancelled/refunded/failed)
@@ -225,7 +213,6 @@ class WooCommerceClient {
       })),
     };
 
-    this._cache.set(normalizedEmail, { result, timestamp: Date.now() });
     return result;
   }
 
@@ -284,17 +271,6 @@ class WooCommerceClient {
     return this.apiPut(config, `/wc/v3/orders/${orderId}`, {
       status: newStatus,
     });
-  }
-
-  /**
-   * Clear cache for a given email.
-   */
-  clearCache(email) {
-    if (email) {
-      this._cache.delete(email.toLowerCase().trim());
-    } else {
-      this._cache.clear();
-    }
   }
 
   /**

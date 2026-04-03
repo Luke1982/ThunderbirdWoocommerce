@@ -26,7 +26,6 @@ async function handleMessage(message) {
 
   const senderEmail = email.toLowerCase().trim();
 
-  if (senderEmail === lastEmail) return;
   lastEmail = senderEmail;
 
   const displayMode = await getDisplayMode();
@@ -63,10 +62,6 @@ browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId
   try {
     await browser.WooCommercePanel.updatePanel({ type: "loading", email: lastEmail }, displayMode);
     await wooCommerce.updateOrderStatus(orderId, newStatus);
-    // Clear cache so we get fresh data
-    if (lastEmail) {
-      wooCommerce.clearCache(lastEmail);
-    }
     // Re-fetch and display updated orders
     const config = await wooCommerce.getConfig();
     const result = await wooCommerce.lookupByEmail(lastEmail);
