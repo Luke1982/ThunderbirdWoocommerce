@@ -58,7 +58,8 @@ var WooCommercePanel = class extends ExtensionAPI {
     function _createTodayPanePanel(win, doc) {
       if (doc.getElementById("woocommerce-box")) {
         const content = doc.getElementById("woocommerce-box-content");
-        return { container: doc.getElementById("woocommerce-box"), content, doc };
+        const titleSpan = doc.getElementById("woocommerce-box-title");
+        return { container: doc.getElementById("woocommerce-box"), content, titleSpan, doc };
       }
 
       // Find the today pane
@@ -112,6 +113,7 @@ var WooCommercePanel = class extends ExtensionAPI {
       toggle.style.cssText = "margin-right: 4px; font-size: 9px;";
 
       const titleSpan = doc.createElement("span");
+      titleSpan.id = "woocommerce-box-title";
       titleSpan.textContent = _msg("panelTitle");
 
       header.appendChild(toggle);
@@ -142,7 +144,7 @@ var WooCommercePanel = class extends ExtensionAPI {
         parent.appendChild(container);
       }
 
-      return { container, content, doc };
+      return { container, content, titleSpan, doc };
     }
 
     // --- Message Pane mode: inject above the message browser in about:3pane ---
@@ -159,7 +161,8 @@ var WooCommercePanel = class extends ExtensionAPI {
       // If already injected, reuse it
       if (innerDoc.getElementById("woocommerce-box")) {
         const content = innerDoc.getElementById("woocommerce-box-content");
-        return { container: innerDoc.getElementById("woocommerce-box"), content, doc: innerDoc };
+        const titleSpan = innerDoc.getElementById("woocommerce-box-title");
+        return { container: innerDoc.getElementById("woocommerce-box"), content, titleSpan, doc: innerDoc };
       }
 
       // Find the messageBrowser element in the 3pane document
@@ -197,6 +200,7 @@ var WooCommercePanel = class extends ExtensionAPI {
       toggle2.style.cssText = "margin-right: 4px; font-size: 9px;";
 
       const titleSpan2 = innerDoc.createElement("span");
+      titleSpan2.id = "woocommerce-box-title";
       titleSpan2.textContent = _msg("panelTitle");
 
       header.appendChild(toggle2);
@@ -223,14 +227,26 @@ var WooCommercePanel = class extends ExtensionAPI {
       // Insert right before the messageBrowser
       messageBrowser.parentNode.insertBefore(container, messageBrowser);
 
-      return { container, content, doc: innerDoc };
+      return { container, content, titleSpan: titleSpan2, doc: innerDoc };
     }
 
     // --- Content rendering ---
     function _updatePanelContent(panel, state) {
-      const { content, doc } = panel;
+      const { content, titleSpan, doc } = panel;
       while (content.firstChild) {
         content.removeChild(content.firstChild);
+      }
+
+      // Update header with email and order count
+      if (titleSpan) {
+        let title = _msg("panelTitle");
+        if (state.email) {
+          title += ` ${_msg("panelTitleFor")} ${state.email}`;
+        }
+        if (state.orders && state.orders.length > 0) {
+          title += ` (${state.orders.length})`;
+        }
+        titleSpan.textContent = title;
       }
 
       switch (state.type) {

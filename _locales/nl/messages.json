@@ -111,6 +111,9 @@
   "restartNote": {
     "message": "Herstart Thunderbird na het wijzigen van de weergavelocatie."
   },
+  "panelTitleFor": {
+    "message": "voor"
+  },
   "changeStatus": {
     "message": "Status wijzigen"
   },

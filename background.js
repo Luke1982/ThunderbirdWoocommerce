@@ -32,9 +32,10 @@ async function handleMessage(message) {
   const displayMode = await getDisplayMode();
 
   try {
-    await browser.WooCommercePanel.updatePanel({ type: "loading" }, displayMode);
+    await browser.WooCommercePanel.updatePanel({ type: "loading", email: senderEmail }, displayMode);
 
     const result = await wooCommerce.lookupByEmail(senderEmail);
+    result.email = senderEmail;
 
     if (result.type === "orders") {
       const config = await wooCommerce.getConfig();
@@ -49,7 +50,7 @@ async function handleMessage(message) {
     } else {
       msg = browser.i18n.getMessage("errorFetching") + ": " + err.message;
     }
-    await browser.WooCommercePanel.updatePanel({ type: "error", message: msg }, displayMode);
+    await browser.WooCommercePanel.updatePanel({ type: "error", message: msg, email: senderEmail }, displayMode);
   }
 }
 
@@ -57,7 +58,7 @@ async function handleMessage(message) {
 browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId, newStatus) => {
   const displayMode = await getDisplayMode();
   try {
-    await browser.WooCommercePanel.updatePanel({ type: "loading" }, displayMode);
+    await browser.WooCommercePanel.updatePanel({ type: "loading", email: lastEmail }, displayMode);
     await wooCommerce.updateOrderStatus(orderId, newStatus);
     // Clear cache so we get fresh data
     if (lastEmail) {
@@ -65,6 +66,7 @@ browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId
     }
     // Re-fetch and display updated orders
     const result = await wooCommerce.lookupByEmail(lastEmail);
+    result.email = lastEmail;
     if (result.type === "orders") {
       const config = await wooCommerce.getConfig();
       result.shopUrl = config ? config.shopUrl : "";
@@ -77,7 +79,7 @@ browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId
     } else {
       msg = browser.i18n.getMessage("statusUpdateFailed") + ": " + err.message;
     }
-    await browser.WooCommercePanel.updatePanel({ type: "error", message: msg }, displayMode);
+    await browser.WooCommercePanel.updatePanel({ type: "error", message: msg, email: lastEmail }, displayMode);
   }
 });
 

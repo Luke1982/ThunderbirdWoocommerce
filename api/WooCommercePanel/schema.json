@@ -33,6 +33,10 @@
             "type": "boolean",
             "optional": true
           },
+          "email": {
+            "type": "string",
+            "optional": true
+          },
           "shopUrl": {
             "type": "string",
             "optional": true
