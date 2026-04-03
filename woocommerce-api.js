@@ -286,12 +286,12 @@ class WooCommerceClient {
     }
 
     return lineItems.map((li) => ({
-      name: li.name,
-      quantity: li.quantity,
-      price: li.price || li.total,
-      image: li.image ? li.image.src : "",
+      name: String(li.name || ""),
+      quantity: parseInt(li.quantity) || 1,
+      price: String(li.price || li.total || "0"),
+      image: (li.image && li.image.src) ? String(li.image.src) : "",
       brand: productMap[li.product_id]
-        ? productMap[li.product_id].brand
+        ? String(productMap[li.product_id].brand)
         : "",
     }));
   }

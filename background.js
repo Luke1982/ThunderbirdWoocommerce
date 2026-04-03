@@ -62,7 +62,11 @@ browser.WooCommercePanel.onOrderDetailsRequested.addListener(async (orderId) => 
     const items = await wooCommerce.getOrderItems(orderId);
     await browser.WooCommercePanel.updateOrderItems(orderId, items);
   } catch (err) {
-    await browser.WooCommercePanel.updateOrderItems(orderId, []);
+    console.error("WooCommercePanel: getOrderItems failed:", err);
+    // Pass error as a single "item" so it's visible in the UI
+    await browser.WooCommercePanel.updateOrderItems(orderId, [
+      { name: "Error: " + err.message, quantity: 0, price: "", image: "", brand: "" }
+    ]);
   }
 });
 
