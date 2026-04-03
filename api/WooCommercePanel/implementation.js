@@ -8,6 +8,7 @@ var { ExtensionSupport } = ChromeUtils.importESModule(
 
 var WooCommercePanel = class extends ExtensionAPI {
   onStartup() {
+    console.log("WooCommercePanel: onStartup called");
     this._panels = new Map();
 
     const self = this;
@@ -17,7 +18,11 @@ var WooCommercePanel = class extends ExtensionAPI {
       chromeURLs: ["chrome://messenger/content/messenger.xhtml"],
 
       onLoadWindow(win) {
-        self._injectSidebar(win);
+        console.log("WooCommercePanel: onLoadWindow fired");
+        // Delay injection to ensure the window is fully initialized
+        win.setTimeout(() => {
+          self._injectSidebar(win);
+        }, 500);
       },
 
       onUnloadWindow(win) {
@@ -27,6 +32,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
     // Inject into already-open windows
     for (const win of Services.wm.getEnumerator("mail:3pane")) {
+      console.log("WooCommercePanel: found existing 3pane window, readyState:", win.document.readyState);
       if (win.document.readyState === "complete") {
         this._injectSidebar(win);
       }
@@ -35,6 +41,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
   onShutdown(isAppShutdown) {
     if (isAppShutdown) return;
+    console.log("WooCommercePanel: onShutdown called");
 
     const extensionId = "woocommerce-customer-lookup@thunderbird-extension";
     ExtensionSupport.unregisterWindowListener(extensionId);
@@ -46,37 +53,90 @@ var WooCommercePanel = class extends ExtensionAPI {
 
   _injectSidebar(win) {
     const doc = win.document;
+    console.log("WooCommercePanel: _injectSidebar called");
 
-    // Create splitter + sidebar panel on the right side
-    const messengerBody =
-      doc.getElementById("messengerBody") ||
-      doc.getElementById("tabmail-container");
-    if (!messengerBody) return;
+    // Already injected?
+    if (doc.getElementById("woocommerce-sidebar")) {
+      console.log("WooCommercePanel: sidebar already exists");
+      return;
+    }
 
-    // Splitter
-    const splitter = doc.createXULElement
-      ? doc.createXULElement("splitter")
-      : doc.createElement("splitter");
+    // In TB 128+/140+, the main content area in messenger.xhtml has this structure:
+    // The today-pane-panel is the right sidebar for calendar/tasks.
+    // We want to add our panel next to it or find the main content area.
+
+    // Try multiple injection strategies
+    let injectionPoint = null;
+    let insertMethod = "after"; // "after", "before", "append"
+
+    // Strategy 1: Find today-pane-panel and insert before it
+    const todayPane = doc.getElementById("today-pane-panel");
+    if (todayPane) {
+      console.log("WooCommercePanel: found today-pane-panel");
+      injectionPoint = todayPane;
+      insertMethod = "before";
+    }
+
+    // Strategy 2: Find tabmail-container
+    if (!injectionPoint) {
+      const tabmailContainer = doc.getElementById("tabmail-container");
+      if (tabmailContainer) {
+        console.log("WooCommercePanel: found tabmail-container");
+        injectionPoint = tabmailContainer;
+        insertMethod = "after";
+      }
+    }
+
+    // Strategy 3: Find any main layout container
+    if (!injectionPoint) {
+      const tabmail = doc.getElementById("tabmail");
+      if (tabmail) {
+        console.log("WooCommercePanel: found tabmail");
+        injectionPoint = tabmail;
+        insertMethod = "after";
+      }
+    }
+
+    if (!injectionPoint) {
+      // Log what we CAN find to help debug
+      const allIds = [];
+      const allElements = doc.querySelectorAll("[id]");
+      allElements.forEach((el) => allIds.push(el.id));
+      console.error(
+        "WooCommercePanel: Could not find injection point. Available IDs:",
+        allIds.slice(0, 50).join(", ")
+      );
+      return;
+    }
+
+    console.log("WooCommercePanel: injecting sidebar using strategy:", insertMethod, "relative to:", injectionPoint.id);
+
+    // Create splitter
+    const splitter = doc.createElement("div");
     splitter.id = "woocommerce-splitter";
-    splitter.setAttribute("resizebefore", "closest");
-    splitter.setAttribute("resizeafter", "closest");
-    splitter.style.cssText = "width: 4px; cursor: ew-resize; background: var(--splitter-color, ThreeDShadow);";
+    splitter.style.cssText = `
+      width: 5px;
+      cursor: ew-resize;
+      background: var(--splitter-color, ThreeDShadow);
+      flex-shrink: 0;
+    `;
 
-    // Sidebar box
-    const sidebar = doc.createXULElement
-      ? doc.createXULElement("vbox")
-      : doc.createElement("vbox");
+    // Create sidebar
+    const sidebar = doc.createElement("div");
     sidebar.id = "woocommerce-sidebar";
-    sidebar.setAttribute("width", "300");
-    sidebar.setAttribute("persist", "width");
     sidebar.style.cssText = `
+      width: 300px;
       min-width: 200px;
       max-width: 500px;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       background: var(--layout-background-0, -moz-Dialog);
       color: var(--layout-color-0, -moz-DialogText);
       font-family: -moz-default;
       font-size: 12px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--splitter-color, ThreeDShadow);
     `;
 
     // Header
@@ -85,32 +145,64 @@ var WooCommercePanel = class extends ExtensionAPI {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 8px;
+      padding: 8px 10px;
       font-weight: bold;
       font-size: 13px;
       border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
       background: var(--layout-background-1, -moz-Dialog);
+      flex-shrink: 0;
     `;
     header.textContent = "WooCommerce";
 
-    // Content area (scrollable)
+    // Content area
     const content = doc.createElement("div");
     content.id = "woocommerce-sidebar-content";
     content.style.cssText = `
       flex: 1;
       overflow-y: auto;
-      padding: 8px;
+      padding: 10px;
     `;
-    content.textContent = "";
 
     sidebar.appendChild(header);
     sidebar.appendChild(content);
 
-    // Add to the right side of the messenger body
-    messengerBody.parentNode.insertBefore(splitter, messengerBody.nextSibling);
-    messengerBody.parentNode.insertBefore(sidebar, splitter.nextSibling);
+    // Splitter drag behavior
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    splitter.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = sidebar.offsetWidth;
+      e.preventDefault();
+    });
+
+    doc.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      const diff = startX - e.clientX;
+      const newWidth = Math.min(500, Math.max(200, startWidth + diff));
+      sidebar.style.width = newWidth + "px";
+    });
+
+    doc.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+
+    // Insert into DOM
+    const parent = injectionPoint.parentNode;
+    if (insertMethod === "before") {
+      parent.insertBefore(splitter, injectionPoint);
+      parent.insertBefore(sidebar, injectionPoint);
+    } else {
+      // Insert after
+      const ref = injectionPoint.nextSibling;
+      parent.insertBefore(splitter, ref);
+      parent.insertBefore(sidebar, ref);
+    }
 
     this._panels.set(win, { sidebar, splitter, content, doc });
+    console.log("WooCommercePanel: sidebar injected successfully");
   }
 
   _removeSidebar(win) {
@@ -120,16 +212,18 @@ var WooCommercePanel = class extends ExtensionAPI {
     panel.sidebar.remove();
     panel.splitter.remove();
     this._panels.delete(win);
+    console.log("WooCommercePanel: sidebar removed");
   }
 
   getAPI(context) {
     const self = this;
     const { extension } = context;
+    console.log("WooCommercePanel: getAPI called");
 
     return {
       WooCommercePanel: {
         async updatePanel(state) {
-          // Update all open panels
+          console.log("WooCommercePanel: updatePanel called, state:", state.type);
           for (const [win, panel] of self._panels) {
             _updatePanelContent(panel, state);
           }
@@ -142,9 +236,6 @@ var WooCommercePanel = class extends ExtensionAPI {
       while (content.firstChild) {
         content.removeChild(content.firstChild);
       }
-
-      content.style.fontStyle = "";
-      content.style.color = "";
 
       switch (state.type) {
         case "loading": {
@@ -233,8 +324,6 @@ var WooCommercePanel = class extends ExtensionAPI {
             const topWin = content.ownerGlobal.top || content.ownerGlobal;
             if (topWin.openLinkExternally) {
               topWin.openLinkExternally(link.href);
-            } else if (topWin.messenger && topWin.messenger.windows) {
-              topWin.openURI(Services.io.newURI(link.href));
             } else {
               const eps = Cc[
                 "@mozilla.org/uriloader/external-protocol-service;1"
