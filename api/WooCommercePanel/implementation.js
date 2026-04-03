@@ -368,14 +368,25 @@ var WooCommercePanel = class extends ExtensionAPI {
     }
 
     function _showStatusMenu(doc, event, order) {
-      // Remove any existing menu
+      // Remove any existing menu and overlay
       const old = doc.getElementById("woocommerce-ctx-menu");
       if (old) old.remove();
+      const oldOverlay = doc.getElementById("woocommerce-ctx-overlay");
+      if (oldOverlay) oldOverlay.remove();
 
       const statuses = [
         "pending", "processing", "on-hold", "completed",
         "cancelled", "refunded", "failed",
       ];
+
+      // Create overlay first — catches all clicks outside the menu
+      const overlay = doc.createElement("div");
+      overlay.id = "woocommerce-ctx-overlay";
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 99998;
+      `;
 
       const menu = doc.createElement("div");
       menu.id = "woocommerce-ctx-menu";
@@ -391,6 +402,28 @@ var WooCommercePanel = class extends ExtensionAPI {
         font-family: -moz-default;
         min-width: 140px;
       `;
+
+      function closeMenu() {
+        menu.remove();
+        overlay.remove();
+      }
+
+      overlay.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenu();
+      });
+      overlay.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenu();
+      });
+      doc.addEventListener("keydown", function keyHandler(e) {
+        if (e.key === "Escape") {
+          closeMenu();
+          doc.removeEventListener("keydown", keyHandler, true);
+        }
+      }, true);
 
       const header = doc.createElement("div");
       header.style.cssText = `
@@ -440,7 +473,7 @@ var WooCommercePanel = class extends ExtensionAPI {
             item.style.background = "none";
           });
           item.addEventListener("click", () => {
-            menu.remove();
+            closeMenu();
             if (statusChangeFire) {
               statusChangeFire.async(order.id, status);
             }
@@ -450,7 +483,9 @@ var WooCommercePanel = class extends ExtensionAPI {
         menu.appendChild(item);
       }
 
-      doc.body.appendChild(menu);
+      const root = doc.body || doc.documentElement;
+      root.appendChild(overlay);
+      root.appendChild(menu);
 
       // Position: ensure it stays within viewport
       const rect = menu.getBoundingClientRect();
@@ -462,29 +497,6 @@ var WooCommercePanel = class extends ExtensionAPI {
       if (y + rect.height > vh) y = vh - rect.height - 4;
       menu.style.left = x + "px";
       menu.style.top = y + "px";
-
-      // Close on any click/mousedown outside, right-click, or Escape
-      const closeMenu = () => {
-        menu.remove();
-        doc.removeEventListener("mousedown", outsideHandler, true);
-        doc.removeEventListener("contextmenu", outsideHandler, true);
-        doc.removeEventListener("keydown", keyHandler, true);
-      };
-      const outsideHandler = (e) => {
-        if (!menu.contains(e.target)) {
-          e.preventDefault();
-          e.stopPropagation();
-          closeMenu();
-        }
-      };
-      const keyHandler = (e) => {
-        if (e.key === "Escape") closeMenu();
-      };
-      setTimeout(() => {
-        doc.addEventListener("mousedown", outsideHandler, true);
-        doc.addEventListener("contextmenu", outsideHandler, true);
-        doc.addEventListener("keydown", keyHandler, true);
-      }, 0);
     }
 
     // --- Helpers ---
