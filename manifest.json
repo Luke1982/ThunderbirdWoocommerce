@@ -1,13 +1,14 @@
 {
   "manifest_version": 2,
   "name": "__MSG_extensionName__",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "__MSG_extensionDescription__",
   "default_locale": "en",
   "browser_specific_settings": {
     "gecko": {
       "id": "woocommerce-customer-lookup@thunderbird-extension",
-      "strict_min_version": "128.0"
+      "strict_min_version": "128.0",
+      "strict_max_version": "140.*"
     }
   },
   "permissions": [
