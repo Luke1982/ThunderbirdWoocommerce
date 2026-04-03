@@ -241,6 +241,7 @@ class WooCommerceClient {
 
     const order = await this.apiGet(config, `/wc/v3/orders/${orderId}`);
     const lineItems = order.data.line_items || [];
+    const currency = order.data.currency || "EUR";
 
     // Collect product IDs to fetch brand info
     const productIds = lineItems
@@ -289,10 +290,19 @@ class WooCommerceClient {
     return lineItems.map((li) => {
       const prod = productMap[li.product_id] || {};
       const rawPrice = parseFloat(li.price || li.total || 0);
+      let formattedPrice;
+      try {
+        formattedPrice = new Intl.NumberFormat(undefined, {
+          style: "currency",
+          currency: currency,
+        }).format(rawPrice);
+      } catch (e) {
+        formattedPrice = rawPrice.toFixed(2);
+      }
       return {
         name: String(li.name || ""),
         quantity: parseInt(li.quantity) || 1,
-        price: rawPrice.toFixed(2),
+        price: formattedPrice,
         image: prod.image || ((li.image && li.image.src) ? String(li.image.src) : ""),
         brand: prod.brand ? String(prod.brand) : "",
       };
