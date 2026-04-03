@@ -111,6 +111,9 @@
   "restartNote": {
     "message": "Restart Thunderbird after changing the display location."
   },
+  "noItems": {
+    "message": "No items"
+  },
   "panelTitleFor": {
     "message": "for"
   },

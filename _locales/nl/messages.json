@@ -111,6 +111,9 @@
   "restartNote": {
     "message": "Herstart Thunderbird na het wijzigen van de weergavelocatie."
   },
+  "noItems": {
+    "message": "Geen artikelen"
+  },
   "panelTitleFor": {
     "message": "voor"
   },

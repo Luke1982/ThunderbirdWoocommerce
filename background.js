@@ -56,6 +56,16 @@ async function handleMessage(message) {
   }
 }
 
+// Handle order detail requests from the panel
+browser.WooCommercePanel.onOrderDetailsRequested.addListener(async (orderId) => {
+  try {
+    const items = await wooCommerce.getOrderItems(orderId);
+    await browser.WooCommercePanel.updateOrderItems(orderId, items);
+  } catch (err) {
+    await browser.WooCommercePanel.updateOrderItems(orderId, []);
+  }
+});
+
 // Handle order status change requests from the panel
 browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId, newStatus) => {
   const displayMode = await getDisplayMode();

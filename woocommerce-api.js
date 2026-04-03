@@ -233,6 +233,70 @@ class WooCommerceClient {
   }
 
   /**
+   * Fetch line items for a single order, enriched with product brand info.
+   */
+  async getOrderItems(orderId) {
+    const config = await this.getConfig();
+    if (!config) throw new Error("Not configured");
+
+    const order = await this.apiGet(config, `/wc/v3/orders/${orderId}`);
+    const lineItems = order.data.line_items || [];
+
+    // Collect product IDs to fetch brand info
+    const productIds = lineItems
+      .map((li) => li.product_id)
+      .filter((id) => id > 0);
+
+    let productMap = {};
+    if (productIds.length > 0) {
+      try {
+        const products = await this.apiGet(config, "/wc/v3/products", {
+          include: productIds.join(","),
+          per_page: 100,
+        });
+        for (const p of products.data) {
+          let brand = "";
+          // Check attributes for brand
+          if (p.attributes) {
+            const brandAttr = p.attributes.find(
+              (a) => a.name.toLowerCase() === "brand" || a.name.toLowerCase() === "merk"
+            );
+            if (brandAttr) {
+              brand = Array.isArray(brandAttr.options)
+                ? brandAttr.options.join(", ")
+                : String(brandAttr.options || "");
+            }
+          }
+          // Check meta_data for brand
+          if (!brand && p.meta_data) {
+            const brandMeta = p.meta_data.find(
+              (m) => m.key === "_brand" || m.key === "brand"
+            );
+            if (brandMeta) brand = String(brandMeta.value);
+          }
+          // Check brands taxonomy (Perfect Brands plugin)
+          if (!brand && p.brands && p.brands.length > 0) {
+            brand = p.brands.map((b) => b.name || b).join(", ");
+          }
+          productMap[p.id] = { brand };
+        }
+      } catch (e) {
+        // Product fetch failed, proceed without brand info
+      }
+    }
+
+    return lineItems.map((li) => ({
+      name: li.name,
+      quantity: li.quantity,
+      price: li.price || li.total,
+      image: li.image ? li.image.src : "",
+      brand: productMap[li.product_id]
+        ? productMap[li.product_id].brand
+        : "",
+    }));
+  }
+
+  /**
    * Make an authenticated PUT request to the WooCommerce REST API.
    */
   async apiPut(config, endpoint, body) {

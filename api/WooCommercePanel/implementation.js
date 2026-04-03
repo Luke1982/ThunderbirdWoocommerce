@@ -8,6 +8,8 @@ var WooCommercePanel = class extends ExtensionAPI {
     let currentPanel = null;
     let currentMode = null;
     let statusChangeFire = null;
+    let detailsRequestFire = null;
+    const orderDetailContainers = new Map();
 
     return {
       WooCommercePanel: {
@@ -22,8 +24,14 @@ var WooCommercePanel = class extends ExtensionAPI {
             currentPanel = _createPanel(displayMode);
           }
           if (currentPanel) {
+            orderDetailContainers.clear();
             _updatePanelContent(currentPanel, state);
           }
+        },
+        async updateOrderItems(orderId, items) {
+          const detail = orderDetailContainers.get(orderId);
+          if (!detail) return;
+          _renderOrderItems(detail.container, detail.doc, items);
         },
         onOrderStatusChangeRequested: new ExtensionCommon.EventManager({
           context,
@@ -31,6 +39,14 @@ var WooCommercePanel = class extends ExtensionAPI {
           register(fire) {
             statusChangeFire = fire;
             return () => { statusChangeFire = null; };
+          },
+        }).api(),
+        onOrderDetailsRequested: new ExtensionCommon.EventManager({
+          context,
+          name: "WooCommercePanel.onOrderDetailsRequested",
+          register(fire) {
+            detailsRequestFire = fire;
+            return () => { detailsRequestFire = null; };
           },
         }).api(),
       },
@@ -327,7 +343,21 @@ var WooCommercePanel = class extends ExtensionAPI {
         `;
 
         const topRow = doc.createElement("div");
-        topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;";
+        topRow.style.cssText = "display: flex; align-items: center; margin-bottom: 2px; gap: 4px;";
+
+        // +/- toggle button
+        const toggleBtn = doc.createElement("span");
+        toggleBtn.textContent = "+";
+        toggleBtn.style.cssText = `
+          cursor: pointer;
+          font-weight: bold;
+          font-size: 13px;
+          width: 14px;
+          text-align: center;
+          user-select: none;
+          color: var(--link-color, -moz-nativehyperlinktext);
+          flex-shrink: 0;
+        `;
 
         const link = doc.createElement("a");
         link.textContent = _msg("orderNumber", [String(order.number)]);
@@ -346,17 +376,18 @@ var WooCommercePanel = class extends ExtensionAPI {
             console.error("WooCommercePanel: Could not open link:", ex);
           }
         });
-        topRow.appendChild(link);
 
         const totalSpan = doc.createElement("span");
         totalSpan.textContent = _formatCurrency(order.total, order.currency);
-        totalSpan.style.cssText = "font-weight: bold; font-size: 11px;";
-        topRow.appendChild(totalSpan);
+        totalSpan.style.cssText = "font-weight: bold; font-size: 11px; margin-left: auto;";
 
+        topRow.appendChild(toggleBtn);
+        topRow.appendChild(link);
+        topRow.appendChild(totalSpan);
         card.appendChild(topRow);
 
         const bottomRow = doc.createElement("div");
-        bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 10px;";
+        bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 10px; padding-left: 18px;";
 
         const dateSpan = doc.createElement("span");
         dateSpan.textContent = _formatDate(order.date);
@@ -375,8 +406,39 @@ var WooCommercePanel = class extends ExtensionAPI {
           background: ${_statusColor(order.status)};
         `;
         bottomRow.appendChild(badge);
-
         card.appendChild(bottomRow);
+
+        // Detail container for order items (hidden by default)
+        const detailContainer = doc.createElement("div");
+        detailContainer.style.cssText = "display: none; padding: 4px 0 4px 18px;";
+        card.appendChild(detailContainer);
+
+        // Store reference for updateOrderItems
+        orderDetailContainers.set(order.id, { container: detailContainer, doc });
+
+        let expanded = false;
+        let fetched = false;
+        toggleBtn.addEventListener("click", () => {
+          expanded = !expanded;
+          if (expanded) {
+            toggleBtn.textContent = "\u2212"; // minus sign
+            detailContainer.style.display = "block";
+            if (!fetched) {
+              fetched = true;
+              detailContainer.innerHTML = "";
+              const loading = doc.createElement("div");
+              loading.style.cssText = "font-style: italic; color: #666; font-size: 10px; padding: 2px 0;";
+              loading.textContent = _msg("loading");
+              detailContainer.appendChild(loading);
+              if (detailsRequestFire) {
+                detailsRequestFire.async(order.id);
+              }
+            }
+          } else {
+            toggleBtn.textContent = "+";
+            detailContainer.style.display = "none";
+          }
+        });
 
         // Right-click context menu for status change
         card.addEventListener("contextmenu", (e) => {
@@ -385,6 +447,67 @@ var WooCommercePanel = class extends ExtensionAPI {
         });
 
         content.appendChild(card);
+      }
+    }
+
+    function _renderOrderItems(container, doc, items) {
+      while (container.firstChild) container.removeChild(container.firstChild);
+
+      if (!items || items.length === 0) {
+        const empty = doc.createElement("div");
+        empty.style.cssText = "font-style: italic; color: #666; font-size: 10px;";
+        empty.textContent = _msg("noItems");
+        container.appendChild(empty);
+        return;
+      }
+
+      for (const item of items) {
+        const row = doc.createElement("div");
+        row.style.cssText = `
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 3px 0;
+          font-size: 10px;
+          border-bottom: 1px solid var(--splitter-color, #eee);
+        `;
+
+        if (item.image) {
+          const img = doc.createElement("img");
+          img.src = item.image;
+          img.style.cssText = "width: 28px; height: 28px; object-fit: cover; border-radius: 3px; flex-shrink: 0;";
+          row.appendChild(img);
+        }
+
+        const info = doc.createElement("div");
+        info.style.cssText = "flex: 1; min-width: 0;";
+
+        const nameSpan = doc.createElement("div");
+        nameSpan.style.cssText = "font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
+        nameSpan.textContent = item.name;
+        nameSpan.title = item.name;
+        info.appendChild(nameSpan);
+
+        if (item.brand) {
+          const brandSpan = doc.createElement("div");
+          brandSpan.style.cssText = "color: #666; font-size: 9px;";
+          brandSpan.textContent = item.brand;
+          info.appendChild(brandSpan);
+        }
+
+        row.appendChild(info);
+
+        const qty = doc.createElement("span");
+        qty.style.cssText = "white-space: nowrap; color: #666; flex-shrink: 0;";
+        qty.textContent = `${item.quantity}x`;
+        row.appendChild(qty);
+
+        const price = doc.createElement("span");
+        price.style.cssText = "white-space: nowrap; font-weight: bold; flex-shrink: 0;";
+        price.textContent = item.price;
+        row.appendChild(price);
+
+        container.appendChild(row);
       }
     }
 

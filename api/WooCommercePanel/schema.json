@@ -86,6 +86,31 @@
             "type": "string"
           }
         ]
+      },
+      {
+        "name": "updateOrderItems",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "orderId",
+            "type": "integer"
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "quantity": { "type": "integer" },
+                "price": { "type": "string" },
+                "image": { "type": "string" },
+                "brand": { "type": "string" }
+              }
+            }
+          }
+        ]
       }
     ],
     "events": [
@@ -100,6 +125,16 @@
           {
             "name": "newStatus",
             "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "onOrderDetailsRequested",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "orderId",
+            "type": "integer"
           }
         ]
       }
