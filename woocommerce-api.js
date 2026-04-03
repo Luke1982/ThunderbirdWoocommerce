@@ -191,10 +191,11 @@ class WooCommerceClient {
       return result;
     }
 
-    // Calculate total order value
-    // Group by currency, sum the dominant one
+    // Calculate total order value (exclude cancelled/refunded/failed)
+    const excludeFromTotal = new Set(["cancelled", "refunded", "failed"]);
     const currencyTotals = {};
     for (const order of orders) {
+      if (excludeFromTotal.has(order.status)) continue;
       const cur = order.currency || "USD";
       const amount = parseFloat(order.total) || 0;
       currencyTotals[cur] = (currencyTotals[cur] || 0) + amount;
