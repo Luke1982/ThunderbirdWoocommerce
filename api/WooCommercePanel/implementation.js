@@ -463,14 +463,28 @@ var WooCommercePanel = class extends ExtensionAPI {
       menu.style.left = x + "px";
       menu.style.top = y + "px";
 
-      // Close on click outside
-      const closeHandler = (e) => {
+      // Close on any click/mousedown outside, right-click, or Escape
+      const closeMenu = () => {
+        menu.remove();
+        doc.removeEventListener("mousedown", outsideHandler, true);
+        doc.removeEventListener("contextmenu", outsideHandler, true);
+        doc.removeEventListener("keydown", keyHandler, true);
+      };
+      const outsideHandler = (e) => {
         if (!menu.contains(e.target)) {
-          menu.remove();
-          doc.removeEventListener("click", closeHandler, true);
+          e.preventDefault();
+          e.stopPropagation();
+          closeMenu();
         }
       };
-      setTimeout(() => doc.addEventListener("click", closeHandler, true), 0);
+      const keyHandler = (e) => {
+        if (e.key === "Escape") closeMenu();
+      };
+      setTimeout(() => {
+        doc.addEventListener("mousedown", outsideHandler, true);
+        doc.addEventListener("contextmenu", outsideHandler, true);
+        doc.addEventListener("keydown", keyHandler, true);
+      }, 0);
     }
 
     // --- Helpers ---
