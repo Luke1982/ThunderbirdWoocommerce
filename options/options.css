@@ -69,3 +69,19 @@ button {
   color: #856404;
   font-size: 12px;
 }
+
+select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid ThreeDShadow;
+  border-radius: 3px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.hint {
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}

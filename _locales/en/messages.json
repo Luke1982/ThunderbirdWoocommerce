@@ -98,5 +98,17 @@
   },
   "statusFailed": {
     "message": "Failed"
+  },
+  "displayMode": {
+    "message": "Display location"
+  },
+  "displayModeTodayPane": {
+    "message": "Today Pane (right sidebar)"
+  },
+  "displayModeMessagePane": {
+    "message": "Message Pane (below email headers)"
+  },
+  "restartNote": {
+    "message": "Restart Thunderbird after changing the display location."
   }
 }

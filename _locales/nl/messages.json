@@ -98,5 +98,17 @@
   },
   "statusFailed": {
     "message": "Mislukt"
+  },
+  "displayMode": {
+    "message": "Weergavelocatie"
+  },
+  "displayModeTodayPane": {
+    "message": "Vandaag-paneel (rechter zijbalk)"
+  },
+  "displayModeMessagePane": {
+    "message": "Berichtvenster (onder e-mailheaders)"
+  },
+  "restartNote": {
+    "message": "Herstart Thunderbird na het wijzigen van de weergavelocatie."
   }
 }

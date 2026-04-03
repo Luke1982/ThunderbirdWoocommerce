@@ -29,6 +29,15 @@
         <input type="password" id="consumerSecret" required />
       </div>
 
+      <div class="field">
+        <label data-i18n="displayMode"></label>
+        <select id="displayMode">
+          <option value="todayPane" data-i18n="displayModeTodayPane"></option>
+          <option value="messagePane" data-i18n="displayModeMessagePane"></option>
+        </select>
+        <div class="hint" data-i18n="restartNote"></div>
+      </div>
+
       <div class="buttons">
         <button type="submit" id="save-btn" data-i18n="save"></button>
         <button type="button" id="test-btn" data-i18n="testConnection"></button>

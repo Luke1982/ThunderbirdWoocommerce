@@ -1,19 +1,14 @@
 "use strict";
 
-/**
- * Options page logic: load, save, and test WooCommerce credentials.
- */
-
 const shopUrlInput = document.getElementById("shopUrl");
 const consumerKeyInput = document.getElementById("consumerKey");
 const consumerSecretInput = document.getElementById("consumerSecret");
+const displayModeSelect = document.getElementById("displayMode");
 const httpsWarning = document.getElementById("https-warning");
 const statusMessage = document.getElementById("status-message");
-const saveBtn = document.getElementById("save-btn");
 const testBtn = document.getElementById("test-btn");
 const form = document.getElementById("settings-form");
 
-// Apply i18n to all elements with data-i18n attributes
 function applyI18n() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
     el.textContent = browser.i18n.getMessage(el.dataset.i18n);
@@ -36,27 +31,25 @@ function hideStatus() {
   statusMessage.hidden = true;
 }
 
-// Check for HTTPS
 shopUrlInput.addEventListener("input", () => {
   const url = shopUrlInput.value.trim();
   httpsWarning.hidden = !url || url.startsWith("https://") || !url.startsWith("http");
 });
 
-// Load saved settings
 async function loadSettings() {
   const data = await browser.storage.local.get([
     "shopUrl",
     "consumerKey",
     "consumerSecret",
+    "displayMode",
   ]);
   if (data.shopUrl) shopUrlInput.value = data.shopUrl;
   if (data.consumerKey) consumerKeyInput.value = data.consumerKey;
   if (data.consumerSecret) consumerSecretInput.value = data.consumerSecret;
-  // Trigger HTTPS check
+  displayModeSelect.value = data.displayMode || "todayPane";
   shopUrlInput.dispatchEvent(new Event("input"));
 }
 
-// Save settings
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   hideStatus();
@@ -65,12 +58,12 @@ form.addEventListener("submit", async (e) => {
     shopUrl: shopUrlInput.value.trim(),
     consumerKey: consumerKeyInput.value.trim(),
     consumerSecret: consumerSecretInput.value.trim(),
+    displayMode: displayModeSelect.value,
   });
 
   showStatus("saved", "success");
 });
 
-// Test connection
 testBtn.addEventListener("click", async () => {
   hideStatus();
   testBtn.disabled = true;
@@ -115,6 +108,5 @@ testBtn.addEventListener("click", async () => {
   testBtn.disabled = false;
 });
 
-// Initialize
 applyI18n();
 loadSettings();

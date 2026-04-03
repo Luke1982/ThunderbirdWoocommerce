@@ -64,6 +64,10 @@
           {
             "name": "state",
             "$ref": "PanelState"
+          },
+          {
+            "name": "displayMode",
+            "type": "string"
           }
         ]
       }

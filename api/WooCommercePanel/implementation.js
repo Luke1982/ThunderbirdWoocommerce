@@ -1,143 +1,244 @@
 "use strict";
 
-/* global ExtensionCommon, ExtensionAPI, Services, Cc, Ci */
+/* global ExtensionCommon, ExtensionAPI, Services */
 
 var WooCommercePanel = class extends ExtensionAPI {
   getAPI(context) {
     const { extension } = context;
-    let panel = null;
-
-    console.log("WooCommercePanel: getAPI called");
-
-    function _ensureSidebar() {
-      if (panel) return panel;
-
-      console.log("WooCommercePanel: _ensureSidebar called");
-
-      const win = Services.wm.getMostRecentWindow("mail:3pane");
-      if (!win) {
-        console.error("WooCommercePanel: no mail:3pane window found");
-        return null;
-      }
-
-      const doc = win.document;
-      console.log("WooCommercePanel: got window, readyState:", doc.readyState);
-
-      // Already injected?
-      if (doc.getElementById("woocommerce-sidebar")) {
-        console.log("WooCommercePanel: sidebar already exists in DOM");
-        const content = doc.getElementById("woocommerce-sidebar-content");
-        panel = { content, doc };
-        return panel;
-      }
-
-      // Log available top-level element IDs for debugging
-      const topIds = [];
-      for (const el of doc.querySelectorAll(":scope > *, body > *, [id]")) {
-        if (el.id) topIds.push(el.id);
-      }
-      console.log("WooCommercePanel: available IDs:", topIds.join(", "));
-
-      // Find injection point - try multiple strategies
-      let injectionParent = null;
-      let insertBefore = null;
-
-      // Strategy 1: today-pane-panel (right side where calendar/tasks are)
-      const todayPane = doc.getElementById("today-pane-panel");
-      if (todayPane && todayPane.parentNode) {
-        console.log("WooCommercePanel: found today-pane-panel");
-        injectionParent = todayPane.parentNode;
-        insertBefore = todayPane;
-      }
-
-      // Strategy 2: Insert at end of tabmail's parent
-      if (!injectionParent) {
-        const tabmail = doc.getElementById("tabmail-container") || doc.getElementById("tabmail");
-        if (tabmail && tabmail.parentNode) {
-          console.log("WooCommercePanel: using tabmail parent, tabmail.id:", tabmail.id);
-          injectionParent = tabmail.parentNode;
-          insertBefore = tabmail.nextSibling;
-        }
-      }
-
-      // Strategy 3: document body
-      if (!injectionParent) {
-        injectionParent = doc.body || doc.documentElement;
-        insertBefore = null;
-        console.log("WooCommercePanel: fallback to body/documentElement");
-      }
-
-      console.log("WooCommercePanel: injectionParent tag:", injectionParent.tagName, "id:", injectionParent.id || "(none)");
-
-      // Create sidebar
-      const sidebar = doc.createElement("div");
-      sidebar.id = "woocommerce-sidebar";
-      sidebar.style.cssText = `
-        width: 300px;
-        min-width: 200px;
-        max-width: 500px;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        background: var(--layout-background-0, -moz-Dialog);
-        color: var(--layout-color-0, -moz-DialogText);
-        font-family: -moz-default;
-        font-size: 12px;
-        flex-shrink: 0;
-        border-left: 1px solid var(--splitter-color, ThreeDShadow);
-      `;
-
-      // Header
-      const header = doc.createElement("div");
-      header.style.cssText = `
-        display: flex;
-        align-items: center;
-        padding: 8px 10px;
-        font-weight: bold;
-        font-size: 13px;
-        border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
-        background: var(--layout-background-1, -moz-Dialog);
-        flex-shrink: 0;
-      `;
-      header.textContent = "WooCommerce";
-
-      // Content area
-      const content = doc.createElement("div");
-      content.id = "woocommerce-sidebar-content";
-      content.style.cssText = `
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-      `;
-
-      sidebar.appendChild(header);
-      sidebar.appendChild(content);
-
-      if (insertBefore) {
-        injectionParent.insertBefore(sidebar, insertBefore);
-      } else {
-        injectionParent.appendChild(sidebar);
-      }
-
-      panel = { content, doc, sidebar };
-      console.log("WooCommercePanel: sidebar injected successfully");
-      return panel;
-    }
+    let currentPanel = null;
+    let currentMode = null;
 
     return {
       WooCommercePanel: {
-        async updatePanel(state) {
-          console.log("WooCommercePanel: updatePanel called, type:", state.type);
-          const p = _ensureSidebar();
-          if (!p) {
-            console.error("WooCommercePanel: could not create sidebar");
-            return;
+        async updatePanel(state, displayMode) {
+          // If mode changed, destroy old panel
+          if (currentMode && currentMode !== displayMode) {
+            _destroyPanel();
           }
-          _updatePanelContent(p, state);
+          currentMode = displayMode;
+
+          if (!currentPanel) {
+            currentPanel = _createPanel(displayMode);
+          }
+          if (currentPanel) {
+            _updatePanelContent(currentPanel, state);
+          }
         },
       },
     };
 
+    function _createPanel(mode) {
+      const win = Services.wm.getMostRecentWindow("mail:3pane");
+      if (!win) return null;
+      const doc = win.document;
+
+      if (mode === "messagePane") {
+        return _createMessagePanePanel(win, doc);
+      } else {
+        return _createTodayPanePanel(win, doc);
+      }
+    }
+
+    function _destroyPanel() {
+      if (!currentPanel) return;
+      if (currentPanel.container) currentPanel.container.remove();
+      currentPanel = null;
+    }
+
+    // --- Today Pane mode: inject a box inside the today-pane-panel ---
+    function _createTodayPanePanel(win, doc) {
+      if (doc.getElementById("woocommerce-box")) {
+        const content = doc.getElementById("woocommerce-box-content");
+        return { container: doc.getElementById("woocommerce-box"), content, doc };
+      }
+
+      // Find the today pane
+      const todayPane = doc.getElementById("today-pane-panel");
+      if (!todayPane) {
+        // Fallback: try to find it inside about:3pane
+        const browser3pane = doc.getElementById("tabmail")?.currentAbout3Pane;
+        if (browser3pane) {
+          const innerDoc = browser3pane.document;
+          const innerTodayPane = innerDoc.getElementById("today-pane-panel");
+          if (innerTodayPane) {
+            return _buildTodayPaneBox(innerDoc, innerTodayPane);
+          }
+        }
+        // Last resort: append to messenger window body
+        return _buildTodayPaneBox(doc, doc.body || doc.documentElement);
+      }
+
+      return _buildTodayPaneBox(doc, todayPane);
+    }
+
+    function _buildTodayPaneBox(doc, parent) {
+      const container = doc.createElement("div");
+      container.id = "woocommerce-box";
+      container.style.cssText = `
+        border-top: 1px solid var(--splitter-color, ThreeDShadow);
+        background: var(--layout-background-0, -moz-Dialog);
+        color: var(--layout-color-0, -moz-DialogText);
+        font-family: -moz-default;
+        font-size: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      `;
+
+      const header = doc.createElement("div");
+      header.style.cssText = `
+        display: flex;
+        align-items: center;
+        padding: 6px 8px;
+        cursor: pointer;
+        user-select: none;
+        font-weight: bold;
+        font-size: 11px;
+        background: var(--layout-background-1, -moz-Dialog);
+        border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
+      `;
+
+      const toggle = doc.createElement("span");
+      toggle.textContent = "\u25BC ";
+      toggle.style.cssText = "margin-right: 4px; font-size: 9px;";
+
+      const titleSpan = doc.createElement("span");
+      titleSpan.textContent = _msg("panelTitle");
+
+      header.appendChild(toggle);
+      header.appendChild(titleSpan);
+
+      const content = doc.createElement("div");
+      content.id = "woocommerce-box-content";
+      content.style.cssText = `
+        padding: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+      `;
+
+      let collapsed = false;
+      header.addEventListener("click", () => {
+        collapsed = !collapsed;
+        content.style.display = collapsed ? "none" : "block";
+        toggle.textContent = collapsed ? "\u25B6 " : "\u25BC ";
+      });
+
+      container.appendChild(header);
+      container.appendChild(content);
+
+      // Insert at the top of the today pane
+      if (parent.firstChild) {
+        parent.insertBefore(container, parent.firstChild);
+      } else {
+        parent.appendChild(container);
+      }
+
+      return { container, content, doc };
+    }
+
+    // --- Message Pane mode: inject below message headers ---
+    function _createMessagePanePanel(win, doc) {
+      if (doc.getElementById("woocommerce-box")) {
+        const content = doc.getElementById("woocommerce-box-content");
+        return { container: doc.getElementById("woocommerce-box"), content, doc };
+      }
+
+      // In TB 128+/140+, the message pane is inside about:message
+      // which is inside the 3pane browser. Try to find it.
+      let messageDoc = null;
+
+      // Try via currentAbout3Pane -> messageBrowser
+      const about3Pane = doc.getElementById("tabmail")?.currentAbout3Pane;
+      if (about3Pane) {
+        const messageBrowser = about3Pane.messageBrowser;
+        if (messageBrowser) {
+          const aboutMessage = messageBrowser.contentWindow;
+          if (aboutMessage) {
+            messageDoc = aboutMessage.document;
+          }
+        }
+      }
+
+      if (!messageDoc) {
+        // Fallback: try direct about:message frame
+        const frames = win.frames;
+        for (let i = 0; i < frames.length; i++) {
+          try {
+            if (frames[i].location.href.includes("about:message")) {
+              messageDoc = frames[i].document;
+              break;
+            }
+          } catch (e) { /* cross-origin, skip */ }
+        }
+      }
+
+      if (!messageDoc) {
+        // Can't find message pane, fall back to today pane
+        return _createTodayPanePanel(win, doc);
+      }
+
+      const headerBox =
+        messageDoc.getElementById("expandedHeadersTopBox") ||
+        messageDoc.getElementById("expandedHeaders2");
+
+      if (!headerBox) {
+        return _createTodayPanePanel(win, doc);
+      }
+
+      const container = messageDoc.createElement("div");
+      container.id = "woocommerce-box";
+      container.style.cssText = `
+        border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
+        font-family: -moz-default;
+        font-size: 12px;
+        background: var(--layout-background-0, -moz-Dialog);
+        color: var(--layout-color-0, -moz-DialogText);
+      `;
+
+      const header = messageDoc.createElement("div");
+      header.style.cssText = `
+        display: flex;
+        align-items: center;
+        padding: 4px 8px;
+        cursor: pointer;
+        user-select: none;
+        font-weight: bold;
+        font-size: 11px;
+      `;
+
+      const toggle2 = messageDoc.createElement("span");
+      toggle2.textContent = "\u25BC ";
+      toggle2.style.cssText = "margin-right: 4px; font-size: 9px;";
+
+      const titleSpan2 = messageDoc.createElement("span");
+      titleSpan2.textContent = _msg("panelTitle");
+
+      header.appendChild(toggle2);
+      header.appendChild(titleSpan2);
+
+      const content = messageDoc.createElement("div");
+      content.id = "woocommerce-box-content";
+      content.style.cssText = `
+        padding: 6px 8px;
+        max-height: 300px;
+        overflow-y: auto;
+      `;
+
+      let collapsed2 = false;
+      header.addEventListener("click", () => {
+        collapsed2 = !collapsed2;
+        content.style.display = collapsed2 ? "none" : "block";
+        toggle2.textContent = collapsed2 ? "\u25B6 " : "\u25BC ";
+      });
+
+      container.appendChild(header);
+      container.appendChild(content);
+      headerBox.parentNode.insertBefore(container, headerBox.nextSibling);
+
+      return { container, content, doc: messageDoc };
+    }
+
+    // --- Content rendering ---
     function _updatePanelContent(panel, state) {
       const { content, doc } = panel;
       while (content.firstChild) {
@@ -147,7 +248,7 @@ var WooCommercePanel = class extends ExtensionAPI {
       switch (state.type) {
         case "loading": {
           const p = doc.createElement("div");
-          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.style.cssText = "padding: 8px 0; font-style: italic; color: #666;";
           p.textContent = _msg("loading");
           content.appendChild(p);
           break;
@@ -155,7 +256,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         case "not_configured": {
           const p = doc.createElement("div");
-          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.style.cssText = "padding: 8px 0; font-style: italic; color: #666;";
           p.textContent = _msg("notConfigured");
           content.appendChild(p);
           break;
@@ -163,7 +264,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         case "customer_not_found": {
           const p = doc.createElement("div");
-          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.style.cssText = "padding: 8px 0; font-style: italic; color: #666;";
           p.textContent = _msg("customerNotFound");
           content.appendChild(p);
           break;
@@ -171,7 +272,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         case "no_orders": {
           const p = doc.createElement("div");
-          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.style.cssText = "padding: 8px 0; font-style: italic; color: #666;";
           p.textContent = _msg("noOrders");
           content.appendChild(p);
           break;
@@ -179,7 +280,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         case "error": {
           const p = doc.createElement("div");
-          p.style.cssText = "padding: 12px 0; color: #dc3545;";
+          p.style.cssText = "padding: 8px 0; color: #dc3545;";
           p.textContent = state.message || _msg("errorFetching");
           content.appendChild(p);
           break;
@@ -196,7 +297,7 @@ var WooCommercePanel = class extends ExtensionAPI {
 
       const totalDiv = doc.createElement("div");
       totalDiv.style.cssText =
-        "font-weight: bold; margin-bottom: 8px; font-size: 13px; padding: 4px 0;";
+        "font-weight: bold; margin-bottom: 6px; font-size: 12px;";
 
       const formattedTotal = _formatCurrency(state.totalValue, state.currency);
       let totalText = `${_msg("totalOrderValue")}: ${formattedTotal}`;
@@ -209,19 +310,19 @@ var WooCommercePanel = class extends ExtensionAPI {
       for (const order of state.orders) {
         const card = doc.createElement("div");
         card.style.cssText = `
-          padding: 6px 0;
+          padding: 4px 0;
           border-bottom: 1px solid var(--splitter-color, #ddd);
         `;
 
         const topRow = doc.createElement("div");
-        topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;";
+        topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;";
 
         const link = doc.createElement("a");
         link.textContent = _msg("orderNumber", [String(order.number)]);
         link.href = `${state.shopUrl}/wp-admin/admin.php?page=wc-orders&action=edit&id=${order.id}`;
         link.title = link.href;
         link.style.cssText =
-          "color: var(--link-color, -moz-nativehyperlinktext); text-decoration: none; font-weight: bold;";
+          "color: var(--link-color, -moz-nativehyperlinktext); text-decoration: none; font-weight: bold; font-size: 11px;";
         link.addEventListener("click", (e) => {
           e.preventDefault();
           try {
@@ -237,13 +338,13 @@ var WooCommercePanel = class extends ExtensionAPI {
 
         const totalSpan = doc.createElement("span");
         totalSpan.textContent = _formatCurrency(order.total, order.currency);
-        totalSpan.style.cssText = "font-weight: bold;";
+        totalSpan.style.cssText = "font-weight: bold; font-size: 11px;";
         topRow.appendChild(totalSpan);
 
         card.appendChild(topRow);
 
         const bottomRow = doc.createElement("div");
-        bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 11px;";
+        bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 10px;";
 
         const dateSpan = doc.createElement("span");
         dateSpan.textContent = _formatDate(order.date);
@@ -254,9 +355,9 @@ var WooCommercePanel = class extends ExtensionAPI {
         badge.textContent = _statusLabel(order.status);
         badge.style.cssText = `
           display: inline-block;
-          padding: 1px 6px;
+          padding: 1px 5px;
           border-radius: 3px;
-          font-size: 10px;
+          font-size: 9px;
           color: white;
           background: ${_statusColor(order.status)};
         `;
@@ -267,6 +368,7 @@ var WooCommercePanel = class extends ExtensionAPI {
       }
     }
 
+    // --- Helpers ---
     function _msg(key, args) {
       try {
         return extension.localeData.localizeMessage(key, args);
