@@ -55,32 +55,12 @@
         }
       }
     ],
-    "events": [
-      {
-        "name": "onMessageDisplayed",
-        "type": "function",
-        "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer"
-          },
-          {
-            "name": "senderEmail",
-            "type": "string"
-          }
-        ]
-      }
-    ],
     "functions": [
       {
         "name": "updatePanel",
         "type": "function",
         "async": true,
         "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer"
-          },
           {
             "name": "state",
             "$ref": "PanelState"

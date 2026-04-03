@@ -1,244 +1,207 @@
 "use strict";
 
-/* global ExtensionCommon, ExtensionAPI */
+/* global ChromeUtils, ExtensionCommon, ExtensionAPI, Services */
+
+var { ExtensionSupport } = ChromeUtils.importESModule(
+  "resource:///modules/ExtensionSupport.sys.mjs"
+);
 
 var WooCommercePanel = class extends ExtensionAPI {
-  /**
-   * Called when the API is first used. Sets up the panel and message listeners.
-   */
-  getAPI(context) {
-    const { extension } = context;
+  onStartup() {
+    this._panels = new Map();
 
-    // Track panels per window context and event listeners.
-    const panels = new Map();
-    let fireOnMessageDisplayed = null;
+    const self = this;
+    const extensionId = "woocommerce-customer-lookup@thunderbird-extension";
+
+    ExtensionSupport.registerWindowListener(extensionId, {
+      chromeURLs: ["chrome://messenger/content/messenger.xhtml"],
+
+      onLoadWindow(win) {
+        self._injectSidebar(win);
+      },
+
+      onUnloadWindow(win) {
+        self._removeSidebar(win);
+      },
+    });
+
+    // Inject into already-open windows
+    for (const win of Services.wm.getEnumerator("mail:3pane")) {
+      if (win.document.readyState === "complete") {
+        this._injectSidebar(win);
+      }
+    }
+  }
+
+  onShutdown(isAppShutdown) {
+    if (isAppShutdown) return;
+
+    const extensionId = "woocommerce-customer-lookup@thunderbird-extension";
+    ExtensionSupport.unregisterWindowListener(extensionId);
+
+    for (const win of Services.wm.getEnumerator("mail:3pane")) {
+      this._removeSidebar(win);
+    }
+  }
+
+  _injectSidebar(win) {
+    const doc = win.document;
+
+    // Create splitter + sidebar panel on the right side
+    const messengerBody =
+      doc.getElementById("messengerBody") ||
+      doc.getElementById("tabmail-container");
+    if (!messengerBody) return;
+
+    // Splitter
+    const splitter = doc.createXULElement
+      ? doc.createXULElement("splitter")
+      : doc.createElement("splitter");
+    splitter.id = "woocommerce-splitter";
+    splitter.setAttribute("resizebefore", "closest");
+    splitter.setAttribute("resizeafter", "closest");
+    splitter.style.cssText = "width: 4px; cursor: ew-resize; background: var(--splitter-color, ThreeDShadow);";
+
+    // Sidebar box
+    const sidebar = doc.createXULElement
+      ? doc.createXULElement("vbox")
+      : doc.createElement("vbox");
+    sidebar.id = "woocommerce-sidebar";
+    sidebar.setAttribute("width", "300");
+    sidebar.setAttribute("persist", "width");
+    sidebar.style.cssText = `
+      min-width: 200px;
+      max-width: 500px;
+      overflow: hidden;
+      background: var(--layout-background-0, -moz-Dialog);
+      color: var(--layout-color-0, -moz-DialogText);
+      font-family: -moz-default;
+      font-size: 12px;
+    `;
+
+    // Header
+    const header = doc.createElement("div");
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      font-weight: bold;
+      font-size: 13px;
+      border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
+      background: var(--layout-background-1, -moz-Dialog);
+    `;
+    header.textContent = "WooCommerce";
+
+    // Content area (scrollable)
+    const content = doc.createElement("div");
+    content.id = "woocommerce-sidebar-content";
+    content.style.cssText = `
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    `;
+    content.textContent = "";
+
+    sidebar.appendChild(header);
+    sidebar.appendChild(content);
+
+    // Add to the right side of the messenger body
+    messengerBody.parentNode.insertBefore(splitter, messengerBody.nextSibling);
+    messengerBody.parentNode.insertBefore(sidebar, splitter.nextSibling);
+
+    this._panels.set(win, { sidebar, splitter, content, doc });
+  }
+
+  _removeSidebar(win) {
+    const panel = this._panels.get(win);
+    if (!panel) return;
+
+    panel.sidebar.remove();
+    panel.splitter.remove();
+    this._panels.delete(win);
+  }
+
+  getAPI(context) {
+    const self = this;
+    const { extension } = context;
 
     return {
       WooCommercePanel: {
-        onMessageDisplayed: new ExtensionCommon.EventManager({
-          context,
-          name: "WooCommercePanel.onMessageDisplayed",
-          register(fire) {
-            fireOnMessageDisplayed = fire;
-
-            // Set up message display listener in the about:message window
-            const windowListener = {
-              onStartHeaders() {},
-              onEndHeaders() {
-                try {
-                  const win = context.cloneScope.window;
-                  if (!win || !win.gMessage) return;
-
-                  const msg = win.gMessage;
-                  const author = msg.author || "";
-
-                  // Extract email from "Name <email>" or plain "email"
-                  const emailMatch = author.match(/<([^>]+)>/) || [
-                    null,
-                    author.trim(),
-                  ];
-                  const email = emailMatch[1];
-
-                  if (!email || !email.includes("@")) return;
-
-                  // Use a stable panel ID for this context.
-                  // Each about:message window gets one panel, keyed by ID 0.
-                  const tabId = 0;
-
-                  // Ensure panel exists for this context
-                  if (!panels.has(tabId)) {
-                    _createPanel(win, tabId);
-                  }
-
-                  fire.async(tabId, email.toLowerCase().trim());
-                } catch (e) {
-                  console.error(
-                    "WooCommercePanel: Error in onEndHeaders:",
-                    e
-                  );
-                }
-              },
-              onEndAttachments() {},
-            };
-
-            try {
-              const win = context.cloneScope.window;
-              if (win && win.gMessageListeners) {
-                win.gMessageListeners.push(windowListener);
-              }
-            } catch (e) {
-              console.error(
-                "WooCommercePanel: Error registering listener:",
-                e
-              );
-            }
-
-            return () => {
-              fireOnMessageDisplayed = null;
-              try {
-                const win = context.cloneScope.window;
-                if (win && win.gMessageListeners) {
-                  const idx = win.gMessageListeners.indexOf(windowListener);
-                  if (idx >= 0) {
-                    win.gMessageListeners.splice(idx, 1);
-                  }
-                }
-              } catch (e) {
-                // Window may already be closed
-              }
-            };
-          },
-        }).api(),
-
-        async updatePanel(tabId, state) {
-          const panel = panels.get(tabId);
-          if (!panel) return;
-          _updatePanelContent(panel, state);
+        async updatePanel(state) {
+          // Update all open panels
+          for (const [win, panel] of self._panels) {
+            _updatePanelContent(panel, state);
+          }
         },
       },
     };
 
-    /**
-     * Create and inject the panel into the message pane.
-     */
-    function _createPanel(win, tabId) {
-      const doc = win.document;
-
-      // Find insertion point: after expandedHeadersTopBox
-      const headerBox =
-        doc.getElementById("expandedHeadersTopBox") ||
-        doc.getElementById("expandedHeaders2");
-      if (!headerBox) {
-        console.warn(
-          "WooCommercePanel: Could not find header element for panel injection"
-        );
-        return;
-      }
-
-      // Create panel container
-      const container = doc.createElement("div");
-      container.id = "woocommerce-panel";
-      container.style.cssText = `
-        border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
-        font-family: -moz-default;
-        font-size: 12px;
-        background: var(--layout-background-0, -moz-Dialog);
-        color: var(--layout-color-0, -moz-DialogText);
-      `;
-
-      // Header bar (collapsible toggle)
-      const header = doc.createElement("div");
-      header.style.cssText = `
-        display: flex;
-        align-items: center;
-        padding: 4px 8px;
-        cursor: pointer;
-        user-select: none;
-        font-weight: bold;
-        font-size: 11px;
-      `;
-
-      const toggle = doc.createElement("span");
-      toggle.textContent = "\u25BC ";
-      toggle.style.cssText = "margin-right: 4px; font-size: 9px;";
-
-      const titleSpan = doc.createElement("span");
-      titleSpan.textContent = _msg("panelTitle");
-
-      header.appendChild(toggle);
-      header.appendChild(titleSpan);
-
-      // Content area
-      const content = doc.createElement("div");
-      content.id = "woocommerce-panel-content";
-      content.style.cssText = `
-        padding: 6px 8px;
-        max-height: 300px;
-        overflow-y: auto;
-      `;
-      content.textContent = _msg("loading");
-
-      // Toggle collapse
-      let collapsed = false;
-      header.addEventListener("click", () => {
-        collapsed = !collapsed;
-        content.style.display = collapsed ? "none" : "block";
-        toggle.textContent = collapsed ? "\u25B6 " : "\u25BC ";
-      });
-
-      container.appendChild(header);
-      container.appendChild(content);
-
-      // Insert after the header box
-      headerBox.parentNode.insertBefore(container, headerBox.nextSibling);
-
-      panels.set(tabId, { container, content, doc });
-    }
-
-    /**
-     * Update the panel content based on state.
-     */
     function _updatePanelContent(panel, state) {
       const { content, doc } = panel;
-      // Clear existing content
       while (content.firstChild) {
         content.removeChild(content.firstChild);
       }
 
+      content.style.fontStyle = "";
+      content.style.color = "";
+
       switch (state.type) {
-        case "loading":
-          content.textContent = _msg("loading");
-          content.style.fontStyle = "italic";
-          content.style.color = "";
+        case "loading": {
+          const p = doc.createElement("div");
+          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.textContent = _msg("loading");
+          content.appendChild(p);
           break;
+        }
 
-        case "not_configured":
-          content.textContent = _msg("notConfigured");
-          content.style.fontStyle = "italic";
-          content.style.color = "";
+        case "not_configured": {
+          const p = doc.createElement("div");
+          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.textContent = _msg("notConfigured");
+          content.appendChild(p);
           break;
+        }
 
-        case "customer_not_found":
-          content.textContent = _msg("customerNotFound");
-          content.style.fontStyle = "italic";
-          content.style.color = "";
+        case "customer_not_found": {
+          const p = doc.createElement("div");
+          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.textContent = _msg("customerNotFound");
+          content.appendChild(p);
           break;
+        }
 
-        case "no_orders":
-          content.textContent = _msg("noOrders");
-          content.style.fontStyle = "italic";
-          content.style.color = "";
+        case "no_orders": {
+          const p = doc.createElement("div");
+          p.style.cssText = "padding: 12px 0; font-style: italic; color: #666;";
+          p.textContent = _msg("noOrders");
+          content.appendChild(p);
           break;
+        }
 
-        case "error":
-          content.textContent = state.message || _msg("errorFetching");
-          content.style.fontStyle = "normal";
-          content.style.color = "red";
+        case "error": {
+          const p = doc.createElement("div");
+          p.style.cssText = "padding: 12px 0; color: #dc3545;";
+          p.textContent = state.message || _msg("errorFetching");
+          content.appendChild(p);
           break;
+        }
 
         case "orders":
-          content.style.fontStyle = "normal";
-          content.style.color = "";
           _renderOrders(panel, state);
           break;
       }
     }
 
-    /**
-     * Render the orders list in the panel.
-     */
     function _renderOrders(panel, state) {
       const { content, doc } = panel;
 
-      // Total value header
+      // Total value
       const totalDiv = doc.createElement("div");
       totalDiv.style.cssText =
-        "font-weight: bold; margin-bottom: 6px; font-size: 12px;";
+        "font-weight: bold; margin-bottom: 8px; font-size: 13px; padding: 4px 0;";
 
-      const formattedTotal = _formatCurrency(
-        state.totalValue,
-        state.currency
-      );
+      const formattedTotal = _formatCurrency(state.totalValue, state.currency);
       let totalText = `${_msg("totalOrderValue")}: ${formattedTotal}`;
       if (state.mixedCurrencies) {
         totalText += ` ${_msg("mixedCurrencies")}`;
@@ -246,65 +209,60 @@ var WooCommercePanel = class extends ExtensionAPI {
       totalDiv.textContent = totalText;
       content.appendChild(totalDiv);
 
-      // Orders table
-      const table = doc.createElement("table");
-      table.style.cssText = `
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 11px;
-      `;
-
+      // Orders list
       for (const order of state.orders) {
-        const row = doc.createElement("tr");
-        row.style.cssText =
-          "border-bottom: 1px solid var(--splitter-color, ThreeDShadow);";
+        const card = doc.createElement("div");
+        card.style.cssText = `
+          padding: 6px 0;
+          border-bottom: 1px solid var(--splitter-color, #ddd);
+        `;
 
-        // Order number (link)
-        const numCell = doc.createElement("td");
-        numCell.style.cssText = "padding: 3px 6px 3px 0;";
+        // Top row: order number link + total
+        const topRow = doc.createElement("div");
+        topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;";
+
         const link = doc.createElement("a");
         link.textContent = _msg("orderNumber", [String(order.number)]);
         link.href = `${state.shopUrl}/wp-admin/admin.php?page=wc-orders&action=edit&id=${order.id}`;
         link.title = link.href;
         link.style.cssText =
-          "color: var(--link-color, -moz-nativehyperlinktext); text-decoration: none;";
+          "color: var(--link-color, -moz-nativehyperlinktext); text-decoration: none; font-weight: bold;";
         link.addEventListener("click", (e) => {
           e.preventDefault();
-          // Open in external browser
-          // Note: loadURI signature may need a triggeringPrincipal in TB 128+.
-          // Verify during integration testing. Alternative: use openLinkExternally().
           try {
-            const win2 = content.ownerGlobal.top;
-            if (win2.openLinkExternally) {
-              win2.openLinkExternally(link.href);
+            const topWin = content.ownerGlobal.top || content.ownerGlobal;
+            if (topWin.openLinkExternally) {
+              topWin.openLinkExternally(link.href);
+            } else if (topWin.messenger && topWin.messenger.windows) {
+              topWin.openURI(Services.io.newURI(link.href));
             } else {
-              const uri = Cc[
-                "@mozilla.org/network/io-service;1"
-              ]
-                .getService(Ci.nsIIOService)
-                .newURI(link.href);
               const eps = Cc[
                 "@mozilla.org/uriloader/external-protocol-service;1"
-              ]
-                .getService(Ci.nsIExternalProtocolService);
-              eps.loadURI(uri);
+              ].getService(Ci.nsIExternalProtocolService);
+              eps.loadURI(Services.io.newURI(link.href));
             }
           } catch (ex) {
             console.error("WooCommercePanel: Could not open link:", ex);
           }
         });
-        numCell.appendChild(link);
-        row.appendChild(numCell);
+        topRow.appendChild(link);
 
-        // Date
-        const dateCell = doc.createElement("td");
-        dateCell.style.cssText = "padding: 3px 6px;";
-        dateCell.textContent = _formatDate(order.date);
-        row.appendChild(dateCell);
+        const totalSpan = doc.createElement("span");
+        totalSpan.textContent = _formatCurrency(order.total, order.currency);
+        totalSpan.style.cssText = "font-weight: bold;";
+        topRow.appendChild(totalSpan);
 
-        // Status badge
-        const statusCell = doc.createElement("td");
-        statusCell.style.cssText = "padding: 3px 6px;";
+        card.appendChild(topRow);
+
+        // Bottom row: date + status badge
+        const bottomRow = doc.createElement("div");
+        bottomRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 11px;";
+
+        const dateSpan = doc.createElement("span");
+        dateSpan.textContent = _formatDate(order.date);
+        dateSpan.style.cssText = "color: #666;";
+        bottomRow.appendChild(dateSpan);
+
         const badge = doc.createElement("span");
         badge.textContent = _statusLabel(order.status);
         badge.style.cssText = `
@@ -315,23 +273,11 @@ var WooCommercePanel = class extends ExtensionAPI {
           color: white;
           background: ${_statusColor(order.status)};
         `;
-        statusCell.appendChild(badge);
-        row.appendChild(statusCell);
+        bottomRow.appendChild(badge);
 
-        // Total
-        const totalCell = doc.createElement("td");
-        totalCell.style.cssText =
-          "padding: 3px 0 3px 6px; text-align: right;";
-        totalCell.textContent = _formatCurrency(
-          order.total,
-          order.currency
-        );
-        row.appendChild(totalCell);
-
-        table.appendChild(row);
+        card.appendChild(bottomRow);
+        content.appendChild(card);
       }
-
-      content.appendChild(table);
     }
 
     // --- Helpers ---
