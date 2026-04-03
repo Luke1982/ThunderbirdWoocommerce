@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <h1 data-i18n="settingsTitle"></h1>
+
+    <form id="settings-form">
+      <div class="field">
+        <label for="shopUrl" data-i18n="shopUrl"></label>
+        <input
+          type="url"
+          id="shopUrl"
+          data-i18n-placeholder="shopUrlPlaceholder"
+          required
+        />
+        <div id="https-warning" class="warning" hidden data-i18n="httpsWarning"></div>
+      </div>
+
+      <div class="field">
+        <label for="consumerKey" data-i18n="consumerKey"></label>
+        <input type="text" id="consumerKey" required />
+      </div>
+
+      <div class="field">
+        <label for="consumerSecret" data-i18n="consumerSecret"></label>
+        <input type="password" id="consumerSecret" required />
+      </div>
+
+      <div class="buttons">
+        <button type="submit" id="save-btn" data-i18n="save"></button>
+        <button type="button" id="test-btn" data-i18n="testConnection"></button>
+      </div>
+
+      <div id="status-message" hidden></div>
+    </form>
+
+    <script src="options.js"></script>
+  </body>
+</html>
