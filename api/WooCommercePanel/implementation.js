@@ -10,9 +10,6 @@ var WooCommercePanel = class extends ExtensionAPI {
     const { extension } = context;
 
     // Track panels per window context and event listeners.
-    // Each about:message context gets its own child script instance,
-    // so we use a simple counter as panel ID within each context.
-    let panelIdCounter = 0;
     const panels = new Map();
     let fireOnMessageDisplayed = null;
 
