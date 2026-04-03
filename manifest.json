@@ -12,7 +12,8 @@
   },
   "permissions": [
     "storage",
-    "messagesRead"
+    "messagesRead",
+    "<all_urls>"
   ],
   "background": {
     "scripts": [
