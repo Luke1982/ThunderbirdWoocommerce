@@ -34,12 +34,15 @@ async function handleMessage(message) {
   try {
     await browser.WooCommercePanel.updatePanel({ type: "loading", email: senderEmail }, displayMode);
 
+    const config = await wooCommerce.getConfig();
     const result = await wooCommerce.lookupByEmail(senderEmail);
     result.email = senderEmail;
 
     if (result.type === "orders") {
-      const config = await wooCommerce.getConfig();
       result.shopUrl = config ? config.shopUrl : "";
+      try {
+        result.statuses = await wooCommerce.getStatuses(config);
+      } catch (e) { /* use fallback in panel */ }
     }
 
     await browser.WooCommercePanel.updatePanel(result, displayMode);
@@ -65,11 +68,14 @@ browser.WooCommercePanel.onOrderStatusChangeRequested.addListener(async (orderId
       wooCommerce.clearCache(lastEmail);
     }
     // Re-fetch and display updated orders
+    const config = await wooCommerce.getConfig();
     const result = await wooCommerce.lookupByEmail(lastEmail);
     result.email = lastEmail;
     if (result.type === "orders") {
-      const config = await wooCommerce.getConfig();
       result.shopUrl = config ? config.shopUrl : "";
+      try {
+        result.statuses = await wooCommerce.getStatuses(config);
+      } catch (e) { /* use fallback in panel */ }
     }
     await browser.WooCommercePanel.updatePanel(result, displayMode);
   } catch (err) {

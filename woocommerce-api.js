@@ -230,6 +230,22 @@ class WooCommerceClient {
   }
 
   /**
+   * Fetch available order statuses from WooCommerce.
+   * Cached for the lifetime of the client (statuses rarely change).
+   * Returns array of { slug, name } objects.
+   */
+  async getStatuses(config) {
+    if (this._statuses) return this._statuses;
+
+    const result = await this.apiGet(config, "/wc/v3/reports/orders/totals");
+    this._statuses = result.data.map((s) => ({
+      slug: s.slug,
+      name: s.name,
+    }));
+    return this._statuses;
+  }
+
+  /**
    * Make an authenticated PUT request to the WooCommerce REST API.
    */
   async apiPut(config, endpoint, body) {

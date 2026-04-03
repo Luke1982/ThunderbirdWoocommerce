@@ -55,6 +55,17 @@
                 "currency": { "type": "string" }
               }
             }
+          },
+          "statuses": {
+            "type": "array",
+            "optional": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "slug": { "type": "string" },
+                "name": { "type": "string" }
+              }
+            }
           }
         }
       }

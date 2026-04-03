@@ -360,7 +360,8 @@ var WooCommercePanel = class extends ExtensionAPI {
         bottomRow.appendChild(dateSpan);
 
         const badge = doc.createElement("span");
-        badge.textContent = _statusLabel(order.status);
+        const statusMatch = state.statuses && state.statuses.find((s) => s.slug === order.status);
+        badge.textContent = statusMatch ? statusMatch.name : _statusLabel(order.status);
         badge.style.cssText = `
           display: inline-block;
           padding: 1px 5px;
@@ -376,24 +377,31 @@ var WooCommercePanel = class extends ExtensionAPI {
         // Right-click context menu for status change
         card.addEventListener("contextmenu", (e) => {
           e.preventDefault();
-          _showStatusMenu(doc, e, order);
+          _showStatusMenu(doc, e, order, state.statuses);
         });
 
         content.appendChild(card);
       }
     }
 
-    function _showStatusMenu(doc, event, order) {
+    function _showStatusMenu(doc, event, order, dynamicStatuses) {
       // Remove any existing menu and overlay
       const old = doc.getElementById("woocommerce-ctx-menu");
       if (old) old.remove();
       const oldOverlay = doc.getElementById("woocommerce-ctx-overlay");
       if (oldOverlay) oldOverlay.remove();
 
-      const statuses = [
-        "pending", "processing", "on-hold", "completed",
-        "cancelled", "refunded", "failed",
+      // Use dynamic statuses from WooCommerce, fall back to defaults
+      const defaultStatuses = [
+        { slug: "pending", name: null },
+        { slug: "processing", name: null },
+        { slug: "on-hold", name: null },
+        { slug: "completed", name: null },
+        { slug: "cancelled", name: null },
+        { slug: "refunded", name: null },
+        { slug: "failed", name: null },
       ];
+      const statuses = dynamicStatuses || defaultStatuses;
 
       // Create overlay first — catches all clicks outside the menu
       const overlay = doc.createElement("div");
@@ -453,7 +461,10 @@ var WooCommercePanel = class extends ExtensionAPI {
       header.textContent = _msg("changeStatus");
       menu.appendChild(header);
 
-      for (const status of statuses) {
+      for (const statusObj of statuses) {
+        const slug = statusObj.slug;
+        const displayName = statusObj.name || _statusLabel(slug);
+
         const item = doc.createElement("div");
         item.style.cssText = `
           padding: 4px 10px;
@@ -469,15 +480,15 @@ var WooCommercePanel = class extends ExtensionAPI {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: ${_statusColor(status)};
+          background: ${_statusColor(slug)};
         `;
         item.appendChild(dot);
 
         const label = doc.createElement("span");
-        label.textContent = _statusLabel(status);
+        label.textContent = displayName;
         item.appendChild(label);
 
-        if (status === order.status) {
+        if (slug === order.status) {
           item.style.fontWeight = "bold";
           item.style.opacity = "0.5";
           item.style.cursor = "default";
@@ -491,7 +502,7 @@ var WooCommercePanel = class extends ExtensionAPI {
           item.addEventListener("click", () => {
             closeMenu();
             if (statusChangeFire) {
-              statusChangeFire.async(order.id, status);
+              statusChangeFire.async(order.id, slug);
             }
           });
         }
