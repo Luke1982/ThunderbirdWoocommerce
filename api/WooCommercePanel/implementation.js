@@ -136,103 +136,33 @@ var WooCommercePanel = class extends ExtensionAPI {
       return { container, content, doc };
     }
 
-    // --- Message Pane mode: inject below message headers ---
+    // --- Message Pane mode: inject above the message browser in about:3pane ---
     function _createMessagePanePanel(win, doc) {
-      // Each time we're called, we need to find the CURRENT message doc
-      // because it changes with each message. So don't cache by woocommerce-box.
-      let messageDoc = null;
-
-      // Strategy 1: currentAbout3Pane -> messageBrowser
+      // Get the about:3pane document — this is stable across messages
       const tabmail = doc.getElementById("tabmail");
       const about3Pane = tabmail?.currentAbout3Pane;
-      console.log("WooCommercePanel: about3Pane:", !!about3Pane);
-
-      if (about3Pane) {
-        // Try .messageBrowser property
-        let mb = about3Pane.messageBrowser;
-        console.log("WooCommercePanel: messageBrowser prop:", !!mb);
-
-        // Try getElementById in about:3pane document
-        if (!mb && about3Pane.document) {
-          mb = about3Pane.document.getElementById("messageBrowser");
-          console.log("WooCommercePanel: messageBrowser by id:", !!mb);
-        }
-        // Also try messagepane
-        if (!mb && about3Pane.document) {
-          mb = about3Pane.document.getElementById("messagepane");
-          console.log("WooCommercePanel: messagepane by id:", !!mb);
-        }
-
-        if (mb) {
-          // mb could be a browser element or an iframe
-          const cw = mb.contentWindow;
-          console.log("WooCommercePanel: contentWindow:", !!cw);
-          if (cw) {
-            messageDoc = cw.document;
-          }
-        }
-
-        // Strategy 2: look for about:message in about3Pane's frames
-        if (!messageDoc && about3Pane.frames) {
-          for (let i = 0; i < about3Pane.frames.length; i++) {
-            try {
-              const href = about3Pane.frames[i].location?.href || "";
-              if (href.includes("message")) {
-                console.log("WooCommercePanel: found message frame:", href);
-                messageDoc = about3Pane.frames[i].document;
-                break;
-              }
-            } catch (e) { /* skip */ }
-          }
-        }
-
-        // Strategy 3: query all browsers in about:3pane
-        if (!messageDoc && about3Pane.document) {
-          const browsers = about3Pane.document.querySelectorAll("browser, iframe");
-          console.log("WooCommercePanel: browsers in 3pane:", browsers.length);
-          for (const b of browsers) {
-            try {
-              const href = b.contentWindow?.location?.href || "";
-              console.log("WooCommercePanel: browser href:", href, "id:", b.id);
-              if (href.includes("message")) {
-                messageDoc = b.contentWindow.document;
-                break;
-              }
-            } catch (e) { /* skip */ }
-          }
-        }
-      }
-
-      // Strategy 4: top-level window frames
-      if (!messageDoc) {
-        for (let i = 0; i < win.frames.length; i++) {
-          try {
-            const href = win.frames[i].location?.href || "";
-            if (href.includes("message")) {
-              console.log("WooCommercePanel: found in top frames:", href);
-              messageDoc = win.frames[i].document;
-              break;
-            }
-          } catch (e) { /* skip */ }
-        }
-      }
-
-      if (!messageDoc) {
-        console.warn("WooCommercePanel: could not find message pane document, falling back to today pane");
+      if (!about3Pane || !about3Pane.document) {
         return _createTodayPanePanel(win, doc);
       }
 
-      console.log("WooCommercePanel: got messageDoc, looking for headers");
+      const innerDoc = about3Pane.document;
 
-      const headerBox =
-        messageDoc.getElementById("expandedHeadersTopBox") ||
-        messageDoc.getElementById("expandedHeaders2");
+      // If already injected, reuse it
+      if (innerDoc.getElementById("woocommerce-box")) {
+        const content = innerDoc.getElementById("woocommerce-box-content");
+        return { container: innerDoc.getElementById("woocommerce-box"), content, doc: innerDoc };
+      }
 
-      if (!headerBox) {
+      // Find the messageBrowser element in the 3pane document
+      const messageBrowser =
+        innerDoc.getElementById("messageBrowser") ||
+        innerDoc.getElementById("messagepane");
+
+      if (!messageBrowser) {
         return _createTodayPanePanel(win, doc);
       }
 
-      const container = messageDoc.createElement("div");
+      const container = innerDoc.createElement("div");
       container.id = "woocommerce-box";
       container.style.cssText = `
         border-bottom: 1px solid var(--splitter-color, ThreeDShadow);
@@ -242,7 +172,7 @@ var WooCommercePanel = class extends ExtensionAPI {
         color: var(--layout-color-0, -moz-DialogText);
       `;
 
-      const header = messageDoc.createElement("div");
+      const header = innerDoc.createElement("div");
       header.style.cssText = `
         display: flex;
         align-items: center;
@@ -253,17 +183,17 @@ var WooCommercePanel = class extends ExtensionAPI {
         font-size: 11px;
       `;
 
-      const toggle2 = messageDoc.createElement("span");
+      const toggle2 = innerDoc.createElement("span");
       toggle2.textContent = "\u25BC ";
       toggle2.style.cssText = "margin-right: 4px; font-size: 9px;";
 
-      const titleSpan2 = messageDoc.createElement("span");
+      const titleSpan2 = innerDoc.createElement("span");
       titleSpan2.textContent = _msg("panelTitle");
 
       header.appendChild(toggle2);
       header.appendChild(titleSpan2);
 
-      const content = messageDoc.createElement("div");
+      const content = innerDoc.createElement("div");
       content.id = "woocommerce-box-content";
       content.style.cssText = `
         padding: 6px 8px;
@@ -280,9 +210,11 @@ var WooCommercePanel = class extends ExtensionAPI {
 
       container.appendChild(header);
       container.appendChild(content);
-      headerBox.parentNode.insertBefore(container, headerBox.nextSibling);
 
-      return { container, content, doc: messageDoc };
+      // Insert right before the messageBrowser
+      messageBrowser.parentNode.insertBefore(container, messageBrowser);
+
+      return { container, content, doc: innerDoc };
     }
 
     // --- Content rendering ---
